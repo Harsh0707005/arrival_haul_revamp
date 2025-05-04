@@ -5,6 +5,6 @@ const { getPopularHaul } = require("../controllers/popularHaulController");
 const { getProductDetails } = require("../controllers/productDetailsController");
 
 router.get("/popular-haul", authMiddleware, getPopularHaul);
-router.get('/product-details', getProductDetails);
+router.get('/product-details', authMiddleware, getProductDetails);
 
 module.exports = router;
