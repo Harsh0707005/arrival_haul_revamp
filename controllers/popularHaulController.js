@@ -40,13 +40,21 @@ exports.getPopularHaul = async (req, res) => {
             let diff = await calculatePriceDifference(source_country_id, destination_country_id, product.price, destination_price)
             let swap_diff = await calculatePriceDifference(destination_country_id, source_country_id, destination_price, product.price)
 
+            const brand = await prisma.brand.findUnique({
+                where: { id: product.brand_id }
+            });
+
+            const country = await prisma.country.findUnique({
+                where: { id: product.country_id }
+            });
+
             return {
                 product_id: product.id,
                 sku_id: product.sku_id,
                 product_name: product.name,
                 product_description: product.description,
-                brand: product.brand_id,
-                country_name: product.country_id,
+                brand: brand ? brand.name : "Unknown",
+                country_name: country ? country.name : "Unknown",
                 images: product.images[0],
                 source_currency_details: {
                     original: diff.sourcePriceOriginal,
