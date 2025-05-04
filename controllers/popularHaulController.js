@@ -5,15 +5,35 @@ const { calculatePriceDifference } = require('../services/currencyConversion');
 exports.getPopularHaul = async (req, res) => {
     try {
         const { source_country_id, destination_country_id } = req.user;
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 10;
+
+        const totalItems = await prisma.product.count({
+            where: { country_id: source_country_id }
+        });
+
+        const totalPages = Math.ceil(totalItems / pageSize);
+
+        const limit = page * 10;
 
         const sourceProducts = await prisma.$queryRaw`
             SELECT * FROM "Product"
             WHERE country_id = ${source_country_id}
             ORDER BY RANDOM()
-            LIMIT 20
+            LIMIT ${limit}
         `;
 
         const skuIds = sourceProducts.map(p => p.sku_id);
+
+        if (!skuIds.length){
+            return {
+                currentPage: 1,
+                totalPages: 0,
+                pageSize,
+                totalItems: 0,
+                popular_haul: []
+            };
+        }
 
         var destinationProducts = await prisma.product.findMany({
             where: {
@@ -71,7 +91,11 @@ exports.getPopularHaul = async (req, res) => {
             }
         }))
         return res.json({
-            matched_products: matchedSourceProducts
+            currentPage: page,
+            totalPages: totalPages,
+            pageSize,
+            totalItems: matchedSourceProducts.length,
+            popular_haul: matchedSourceProducts
         });
     } catch (err) {
         console.error("Error in getPopularHaul:", err);
