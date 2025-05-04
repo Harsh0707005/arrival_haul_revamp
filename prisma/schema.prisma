@@ -1,0 +1,88 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+    id                     Int      @id @default(autoincrement())
+    firstName              String
+    lastName               String
+    email                  String   @unique
+    mobile                 String   @unique
+    password               String
+    token                  String?
+    sourceCountry          Country  @relation("SourceCountry", fields: [source_country_id], references: [id])
+    source_country_id      Int
+    destinationCountry     Country  @relation("DestinationCountry", fields: [destination_country_id], references: [id])
+    destination_country_id Int
+    createdAt              DateTime @default(now())
+    updatedAt              DateTime @updatedAt
+}
+
+model Product {
+    id          Int      @id @default(autoincrement())
+    name        String
+    description String
+    url         String
+    images      String[] // array of image URLs
+    sku_id      String
+    country     Country  @relation(fields: [country_id], references: [id])
+    country_id  Int
+    brand       Brand    @relation(fields: [brand_id], references: [id])
+    brand_id    Int
+    category    Category @relation(fields: [category_id], references: [id])
+    category_id Int
+    price       Float
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+}
+
+model Brand {
+    id        Int       @id @default(autoincrement())
+    name      String    @unique
+    image     String?
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+    products  Product[]
+}
+
+model Category {
+    id        Int       @id @default(autoincrement())
+    name      String    @unique
+    products  Product[]
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+}
+
+model Country {
+    id             Int            @id @default(autoincrement())
+    name           String
+    code           String
+    currency       String
+    currencySymbol String
+    mobileCode     String
+    products       Product[]
+    exchangeFrom   ExchangeRate[] @relation("FromCountry")
+    exchangeTo     ExchangeRate[] @relation("ToCountry")
+    usersFrom      User[]         @relation("SourceCountry")
+    usersTo        User[]         @relation("DestinationCountry")
+    createdAt      DateTime       @default(now())
+    updatedAt      DateTime       @updatedAt
+}
+
+model ExchangeRate {
+    id        Int      @id @default(autoincrement())
+    from      Country  @relation("FromCountry", fields: [fromId], references: [id])
+    fromId    Int
+    to        Country  @relation("ToCountry", fields: [toId], references: [id])
+    toId      Int
+    rate      Float
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@unique([fromId, toId])
+}

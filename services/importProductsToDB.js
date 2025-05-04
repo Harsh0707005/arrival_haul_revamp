@@ -1,0 +1,91 @@
+const fs = require('fs');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+async function main() {
+    const file = fs.readFileSync('products.json', 'utf8');
+    const products = JSON.parse(file);
+
+    for (const product of products) {
+        const {
+            product_url,
+            product_unique_id,
+            product_description,
+            product_name,
+            product_images,
+            product_price,
+            product_brand_name,
+            website_logo,
+            product_category,
+            product_country
+        } = product;
+
+        const numericPrice = parseFloat(product_price.replace(/[^0-9.]/g, '')) || 0;
+
+        // Upsert Country
+        // const country = await prisma.country.upsert({
+        //     where: { id: parseInt(product_country.country_id) },
+        //     update: {},
+        //     create: {
+        //         id: parseInt(product_country.country_id),
+        //         name: product_country.country_name,
+        //         code: product_country.country_code,
+        //         currency: product_country.currency,
+        //         currencySymbol: product_country.currency_symbol,
+        //         mobileCode: product_country.mobile_code,
+        //     }
+        // });
+
+        // Upsert Brand
+        const brand = await prisma.brand.upsert({
+            where: { name: product_brand_name },
+            update: { image: website_logo },
+            create: {
+                name: product_brand_name,
+                image: website_logo
+            }
+        });
+
+        // Upsert Category
+        const category = await prisma.category.upsert({
+            where: { name: product_category },
+            update: {},
+            create: {
+                name: product_category
+            }
+        });
+
+        // Create Product
+        await prisma.product.create({
+            data: {
+                name: product_name,
+                description: product_description,
+                url: product_url,
+                sku_id: product_unique_id,
+                images: product_images,
+                price: numericPrice,
+                country: {
+                    connect: { id: parseInt(product_country.country_id) }
+                },
+                brand: {
+                    connect: { id: brand.id }
+                },
+                category: {
+                    connect: { id: category.id }
+                }
+            }
+        });
+
+        console.log(`Imported: ${product_name}`);
+    }
+
+    console.log('✅ Import finished.');
+}
+
+main()
+    .catch((e) => {
+        console.error('❌ Error:', e);
+    })
+    .finally(async () => {
+        await prisma.$disconnect();
+    });
