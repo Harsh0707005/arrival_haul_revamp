@@ -1,32 +1,34 @@
-const jwt = require("jsonwebtoken");
-const { PrismaClient } = require("@prisma/client");
+const jwt = require('jsonwebtoken');
+const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-module.exports = async function (req, res, next) {
-//   const authHeader = req.headers["authorization"];
-//   const token = authHeader && authHeader.split(" ")[1];
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-//   if (!token) return res.status(401).json({ error: "Access token required" });
+const authMiddleware = async (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
 
-//   try {
-//     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-//     const user = await prisma.user.findUnique({
-//       where: { id: decoded.id }
-//     });
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Unauthorized: Missing token' });
+        }
 
-//     if (!user) return res.status(401).json({ error: "Invalid token" });
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, JWT_SECRET);
 
-//     req.user = user;
-//     next();
-//   } catch (err) {
-//     console.error(err);
-//     res.status(403).json({ error: "Invalid or expired token" });
-//   }
-    const user = await prisma.user.findUnique({
-        where: {id: 1}
-    });
+        const user = await prisma.user.findUnique({
+            where: { email: decoded.email },
+        });
 
-    req.user = user;
-    next();
+        if (!user || user.token !== token) {
+            return res.status(401).json({ error: 'Unauthorized: Invalid token or user not found' });
+        }
 
+        req.user = user;
+        next();
+    } catch (err) {
+        console.error("Auth error:", err);
+        return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
+    }
 };
+
+module.exports = authMiddleware;

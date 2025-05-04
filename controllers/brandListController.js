@@ -5,7 +5,6 @@ exports.getCommonBrands = async (req, res) => {
     try {
         const { source_country_id, destination_country_id } = req.user;
 
-        // Get brand IDs present in both countries
         const commonBrandIds = await prisma.$queryRaw`
             SELECT "Brand".id
             FROM "Product"
@@ -17,7 +16,6 @@ exports.getCommonBrands = async (req, res) => {
 
         const brandIds = commonBrandIds.map(b => b.id);
 
-        // Fetch full details of those brands
         const fullBrands = await prisma.brand.findMany({
             where: {
                 id: { in: brandIds }

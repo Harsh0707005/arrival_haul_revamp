@@ -28,7 +28,7 @@ model Product {
     name        String
     description String
     url         String
-    images      String[] // array of image URLs
+    images      String[]
     sku_id      String
     country     Country  @relation(fields: [country_id], references: [id])
     country_id  Int
