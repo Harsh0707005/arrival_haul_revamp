@@ -24,15 +24,14 @@ exports.getPopularHaul = async (req, res) => {
         `;
 
         const skuIds = sourceProducts.map(p => p.sku_id);
-
-        if (!skuIds.length){
-            return {
+        if (skuIds.length==0){
+            return res.json({
                 currentPage: 1,
                 totalPages: 0,
                 pageSize,
                 totalItems: 0,
                 popular_haul: []
-            };
+            });
         }
 
         var destinationProducts = await prisma.product.findMany({
