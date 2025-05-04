@@ -93,5 +93,4 @@ const getExchangeRate = async (sourceCountryId, destinationCountryId) => {
     };
 };
 
-// ✅ Example Test
-calculatePriceDifference(14, 87, 100, 90).then(console.log).catch(console.error);
+module.exports = { calculatePriceDifference };

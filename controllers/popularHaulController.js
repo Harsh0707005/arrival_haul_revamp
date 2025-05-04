@@ -1,36 +1,72 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const { calculatePriceDifference } = require('../services/currencyConversion');
 
 exports.getPopularHaul = async (req, res) => {
-  try {
-    const { source_country_id, destination_country_id } = req.user;
+    try {
+        const { source_country_id, destination_country_id } = req.user;
 
-    const sourceProducts = await prisma.product.findMany({
-      where: { country_id: source_country_id },
-      take: 10,
-      orderBy: { id: "desc" } // Replace with random() SQL if truly random needed
-    });
+        const sourceProducts = await prisma.$queryRaw`
+            SELECT * FROM "Product"
+            WHERE country_id = ${source_country_id}
+            ORDER BY RANDOM()
+            LIMIT 20
+        `;
 
-    const skuIds = sourceProducts.map(p => p.sku_id);
+        const skuIds = sourceProducts.map(p => p.sku_id);
 
-    const destinationProducts = await prisma.product.findMany({
-      where: {
-        sku_id: { in: skuIds },
-        country_id: destination_country_id
-      }
-    });
+        var destinationProducts = await prisma.product.findMany({
+            where: {
+                sku_id: { in: skuIds },
+                country_id: destination_country_id
+            }
+        });
 
-    const matchedSkuSet = new Set(destinationProducts.map(p => p.sku_id));
+        const matchedSkuSet = new Set(destinationProducts.map(p => p.sku_id));
 
-    const matchedSourceProducts = sourceProducts.filter(p =>
-      matchedSkuSet.has(p.sku_id)
-    );
+        var matchedSourceProducts = sourceProducts.filter(p =>
+            matchedSkuSet.has(p.sku_id)
+        );
 
-    return res.json({
-      matched_products: matchedSourceProducts
-    });
-  } catch (err) {
-    console.error("Error in getPopularHaul:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
+        matchedSourceProducts = await Promise.all(matchedSourceProducts.map(async function (product) {
+            let destination_price = 0;
+            for (let destination_product of destinationProducts) {
+                if (destination_product.sku_id == product.sku_id) {
+                    destination_price = destination_product.price
+                    break;
+                }
+            }
+
+            let diff = await calculatePriceDifference(source_country_id, destination_country_id, product.price, destination_price)
+            let swap_diff = await calculatePriceDifference(destination_country_id, source_country_id, destination_price, product.price)
+
+            return {
+                product_id: product.id,
+                sku_id: product.sku_id,
+                product_name: product.name,
+                product_description: product.description,
+                brand: product.brand_id,
+                country_name: product.country_id,
+                images: product.images[0],
+                source_currency_details: {
+                    original: diff.sourcePriceOriginal,
+                    converted: diff.destinationPriceConverted,
+                    price_difference_percentage: diff.percentageDifference,
+                    currency: diff.sourceCurrency
+                },
+                destination_currency_details: {
+                    original: diff.destinationPriceOriginal,
+                    converted: diff.sourcePriceConverted,
+                    price_difference_percentage: swap_diff.percentageDifference,
+                    currency: diff.destinationCurrency
+                }
+            }
+        }))
+        return res.json({
+            matched_products: matchedSourceProducts
+        });
+    } catch (err) {
+        console.error("Error in getPopularHaul:", err);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
 };
