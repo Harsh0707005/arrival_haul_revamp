@@ -5,6 +5,10 @@ const { getPopularHaul } = require("../controllers/popularHaulController");
 const { getProductDetails } = require("../controllers/productDetailsController");
 const { getCommonBrands } = require("../controllers/brandListController");
 const { getCommonCategories } = require("../controllers/categoryListController");
+const { login, signup } = require("../controllers/authController");
+
+router.post('/signup', signup);
+router.post('/login', login);
 
 router.get("/popular-haul", authMiddleware, getPopularHaul);
 router.get('/product-details', authMiddleware, getProductDetails);
