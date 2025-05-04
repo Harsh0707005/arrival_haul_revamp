@@ -21,22 +21,6 @@ async function main() {
         } = product;
 
         const numericPrice = parseFloat(product_price.replace(/[^0-9.]/g, '')) || 0;
-
-        // Upsert Country
-        // const country = await prisma.country.upsert({
-        //     where: { id: parseInt(product_country.country_id) },
-        //     update: {},
-        //     create: {
-        //         id: parseInt(product_country.country_id),
-        //         name: product_country.country_name,
-        //         code: product_country.country_code,
-        //         currency: product_country.currency,
-        //         currencySymbol: product_country.currency_symbol,
-        //         mobileCode: product_country.mobile_code,
-        //     }
-        // });
-
-        // Upsert Brand
         const brand = await prisma.brand.upsert({
             where: { name: product_brand_name },
             update: { image: website_logo },
@@ -46,7 +30,6 @@ async function main() {
             }
         });
 
-        // Upsert Category
         const category = await prisma.category.upsert({
             where: { name: product_category },
             update: {},
@@ -55,7 +38,6 @@ async function main() {
             }
         });
 
-        // Create Product
         await prisma.product.create({
             data: {
                 name: product_name,

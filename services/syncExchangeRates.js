@@ -16,7 +16,6 @@ async function syncExchangeRates() {
         });
 
         for (const country of countries) {
-            // const { id: fromId, currency } = country;
             const fromId = parseInt(country.id)
             const currency = country.currency
 
@@ -29,8 +28,7 @@ async function syncExchangeRates() {
 
                 for (const [toCode, rate] of Object.entries(rates)) {
                     const toIds = countryCodeMap[toCode];
-                    // console.log(toIds)
-                    if (!toIds) continue; // skip same country or unknown
+                    if (!toIds) continue;
                     for (const toId of toIds) {
                         await prisma.exchangeRate.upsert({
                             where: {
