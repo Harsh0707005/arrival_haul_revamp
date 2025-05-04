@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { PrismaClient } = require("@prisma/client");
 const { calculatePriceDifference } = require("../services/currencyConversion");
 const prisma = new PrismaClient();
