@@ -3,7 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-    const file = fs.readFileSync('products.json', 'utf8');
+    const file = fs.readFileSync('abc-8.json', 'utf8');
     const products = JSON.parse(file);
 
     for (const product of products) {

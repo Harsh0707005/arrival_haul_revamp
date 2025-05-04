@@ -30,6 +30,12 @@ exports.getProductDetails = async (req, res) => {
             }
         });
 
+        if (!product){
+            return res.json({
+                message: "No Product Details found"
+            })
+        }
+
         const destinationProduct = await prisma.product.findFirst({
             where: {
                 country_id: destination_country_id,
