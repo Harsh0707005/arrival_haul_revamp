@@ -13,9 +13,28 @@ exports.getUserDetails = async (req, res) => {
             },
         });
 
+        const mapCountry = (country) => ({
+            country_id: country.id,
+            country_name: country.name,
+            currency: country.currency,
+            currency_symbol: country.currencySymbol,
+            country_code: country.code,
+            mobile_code: country.mobileCode,
+        });
+
         return res.json({
             success: true,
-            user,
+            user: {
+                id: user.id,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                email: user.email,
+                mobile: user.mobile,
+                sourceCountry: mapCountry(user.sourceCountry),
+                destinationCountry: mapCountry(user.destinationCountry),
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
+            },
         });
     } catch (error) {
         console.error('Error fetching user details:', error);
