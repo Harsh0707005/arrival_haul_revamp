@@ -75,7 +75,7 @@ exports.getPopularHaul = async (req, res) => {
                 product_description: product.description,
                 brand: brand ? brand.name : "Unknown",
                 country_name: country ? country.name : "Unknown",
-                images: product.images[0],
+                images: [product.images[0]],
                 source_currency_details: {
                     original: diff.sourcePriceOriginal,
                     converted: diff.destinationPriceConverted,
