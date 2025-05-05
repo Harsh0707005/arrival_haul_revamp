@@ -76,13 +76,13 @@ exports.getPopularHaul = async (req, res) => {
                 brand: brand ? brand.name : "Unknown",
                 country_name: country ? country.name : "Unknown",
                 images: [product.images[0]],
-                source_currency_details: {
+                source_country_details: {
                     original: diff.sourcePriceOriginal,
                     converted: diff.destinationPriceConverted,
                     price_difference_percentage: diff.percentageDifference,
                     currency: diff.sourceCurrency
                 },
-                destination_currency_details: {
+                destination_country_details: {
                     original: diff.destinationPriceOriginal,
                     converted: diff.sourcePriceConverted,
                     price_difference_percentage: swap_diff.percentageDifference,
