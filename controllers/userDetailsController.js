@@ -3,7 +3,15 @@ const prisma = new PrismaClient();
 
 exports.getUserDetails = async (req, res) => {
     try {
-        const user = req.user;
+        const userId = req.user.id;
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                sourceCountry: true,
+                destinationCountry: true,
+            },
+        });
 
         return res.json({
             success: true,
