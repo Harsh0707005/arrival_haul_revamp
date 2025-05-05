@@ -8,9 +8,11 @@ const { getCommonBrands } = require("../controllers/brandListController");
 const { getCommonCategories } = require("../controllers/categoryListController");
 const { login, signup } = require("../controllers/authController");
 const { updateUserCountries } = require("../controllers/updateCountryController");
+const { getUserDetails } = require('../controllers/userDetailsController');
 
 router.post('/signup', signup);
 router.post('/login', login);
+router.get('/user-details', authMiddleware, getUserDetails);
 
 router.post('/update-countries', authMiddleware, updateUserCountries);
 

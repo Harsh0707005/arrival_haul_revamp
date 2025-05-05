@@ -29,7 +29,7 @@ exports.signup = async (req, res) => {
         });
 
         if (existingUser) {
-            return res.status(400).json({ error: "User already exists with this email or mobile." });
+            return res.status(400).json({ success: false, message: "User already exists with this email or mobile." });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -51,6 +51,7 @@ exports.signup = async (req, res) => {
           
 
         res.status(201).json({
+            success: true,
             message: "User registered successfully",
             user: {
                 id: user.id,
@@ -66,7 +67,7 @@ exports.signup = async (req, res) => {
 
     } catch (error) {
         console.error("Signup error:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+        res.status(500).json({success: false, message: "Internal Server Error" });
     }
 };
 
@@ -79,13 +80,13 @@ exports.login = async (req, res) => {
         });
 
         if (!user) {
-            return res.status(400).json({ error: "Invalid email or password." });
+            return res.status(400).json({success: false, message: "Invalid email or password." });
         }
 
         const validPassword = await bcrypt.compare(password, user.password);
 
         if (!validPassword) {
-            return res.status(400).json({ error: "Invalid email or password." });
+            return res.status(400).json({success: false, message: "Invalid email or password." });
         }
 
         const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
@@ -96,6 +97,7 @@ exports.login = async (req, res) => {
         });
 
         res.json({
+            success: true,
             message: "Login successful",
             user: {
                 id: user.id,
@@ -111,6 +113,6 @@ exports.login = async (req, res) => {
 
     } catch (error) {
         console.error("Login error:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+        res.status(500).json({success: false, message: "Internal Server Error" });
     }
 };
