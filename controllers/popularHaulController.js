@@ -15,7 +15,7 @@ exports.getPopularHaul = async (req, res) => {
 
         const totalPages = Math.ceil(totalItems / pageSize);
 
-        const limit = page * 10;
+        const limit = pageSize * 10;
 
         const sourceProducts = await prisma.$queryRaw`
             SELECT * FROM "Product"
@@ -90,6 +90,7 @@ exports.getPopularHaul = async (req, res) => {
                 }
             }
         }))
+        matchedSourceProducts = matchedSourceProducts.slice(0, pageSize)
         return res.json({
             currentPage: page,
             totalPages: totalPages,
