@@ -14,7 +14,7 @@ const mapCountry = (country) => ({
 
 exports.getProductDetails = async (req, res) => {
     try {
-        const { product_id } = req.body;
+        const { product_id } = req.query;
         const { source_country_id, destination_country_id } = req.user;
 
         const source_country = await prisma.country.findUnique({
