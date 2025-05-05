@@ -69,19 +69,21 @@ exports.getProductDetails = async (req, res) => {
             price: product.price,
             brand_id: product.brand_id,
             brand_name: product.brand?.name || "Unknown",
+            brand_image_url: product.brand?.image || "",
             country_name: product.country?.name || "Unknown",
             is_favourite: false,
             images: product.images,
             currency: product.currency,
-
-            source_currency_details: {
+            source_country_details: {
+                product_url: product.url,
                 country: mapCountry(source_country),
                 original: diff.sourcePriceOriginal,
                 converted: diff.destinationPriceConverted,
                 price_difference_percentage: diff.percentageDifference,
                 currency: diff.sourceCurrency
             },
-            destination_currency_details: {
+            destination_country_details: {
+                product_url: destinationProduct.url,
                 country: mapCountry(destination_country),
                 original: diff.destinationPriceOriginal,
                 converted: diff.sourcePriceConverted,
