@@ -10,10 +10,13 @@ const { login, signup } = require("../controllers/authController");
 const { updateUserCountries } = require("../controllers/updateCountryController");
 const { getUserDetails } = require('../controllers/userDetailsController');
 const { getCountries } = require('../controllers/countryListController');
+const { getCountryExclusiveProducts } = require('../controllers/countryExclusive');
 
 router.post('/signup', signup);
 router.post('/login', login);
 router.get('/user-details', authMiddleware, getUserDetails);
+
+router.get("/country-exclusives", authMiddleware, getCountryExclusiveProducts)
 
 router.get('/country-list', authMiddleware, getCountries);
 router.post('/update-countries', authMiddleware, updateUserCountries);
