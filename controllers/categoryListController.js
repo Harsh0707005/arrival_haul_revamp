@@ -23,9 +23,19 @@ exports.getCommonCategories = async (req, res) => {
             }
         });
 
+
+        const formattedCategories = fullCategories.map(category => ({
+            category_id: category.id,
+            category_name: category.name,
+            discount: 0,
+            is_negative: false,
+            createdAt: category.createdAt,
+            updatedAt: category.updatedAt
+        }))
+
         return res.json({
             message: "Categories found in both countries",
-            categories: fullCategories
+            categories: formattedCategories
         });
 
     } catch (err) {
