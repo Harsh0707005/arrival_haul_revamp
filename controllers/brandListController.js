@@ -27,6 +27,8 @@ exports.getCommonBrands = async (req, res) => {
             brand_id: brand.id,
             brand_name: brand.name,
             image: brand.image,
+            discount: 0,
+            is_negative: false,
             createdAt: brand.createdAt,
             updatedAt: brand.updatedAt
         }))
