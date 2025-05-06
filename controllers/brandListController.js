@@ -23,13 +23,25 @@ exports.getCommonBrands = async (req, res) => {
             }
         });
 
+        const formattedBrands = fullBrands.map(brand => ({
+            brand_id: brand.id,
+            brand_name: brand.name,
+            image: brand.image,
+            createdAt: brand.createdAt,
+            updatedAt: brand.updatedAt
+        }))
+
         return res.json({
             message: "Brands found in both countries",
-            brands: fullBrands
+            success: true,
+            brands: formattedBrands
         });
 
     } catch (err) {
         console.error("Error in getCommonBrands:", err);
-        res.status(500).json({ error: "Internal Server Error" });
+        res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        });
     }
 };
