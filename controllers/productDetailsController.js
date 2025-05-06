@@ -73,7 +73,6 @@ exports.getProductDetails = async (req, res) => {
             country_name: product.country?.name || "Unknown",
             is_favourite: false,
             images: product.images,
-            currency: product.currency,
             source_country_details: {
                 product_url: product.url,
                 country: mapCountry(source_country),
@@ -82,14 +81,14 @@ exports.getProductDetails = async (req, res) => {
                 price_difference_percentage: diff.percentageDifference,
                 currency: diff.sourceCurrency
             },
-            destination_country_details: {
-                product_url: destinationProduct.url,
+            destination_country_details: destinationProduct?.url && diff.destinationPriceOriginal ? {
+                product_url: destinationProduct?.url || "",
                 country: mapCountry(destination_country),
                 original: diff.destinationPriceOriginal,
                 converted: diff.sourcePriceConverted,
                 price_difference_percentage: swap_diff.percentageDifference,
                 currency: diff.destinationCurrency
-            }
+            } : {}
         };
 
         return res.json({
