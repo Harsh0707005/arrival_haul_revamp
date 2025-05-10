@@ -10,6 +10,7 @@ async function main() {
     for (const product of products) {
         const {
             product_url,
+            product_id,
             product_unique_id,
             product_description,
             product_name,
@@ -44,7 +45,7 @@ async function main() {
                 name: product_name,
                 description: product_description,
                 url: product_url,
-                sku_id: product_unique_id,
+                sku_id: product_id,
                 images: product_images,
                 price: numericPrice,
                 country: {
