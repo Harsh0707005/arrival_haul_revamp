@@ -8,17 +8,28 @@ exports.getBrandCommonProducts = async (req, res) => {
         const { brand_id } = req.query;
         const { source_country_id, destination_country_id } = req.user;
 
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 10;
+
         if (!brand_id) {
             return res.status(400).json({ success: false, message: "Missing brand_id in query params" });
         }
 
-        const sourceProducts = await prisma.product.findMany({
+        const totalItems = await prisma.product.count({
             where: {
                 brand_id: parseInt(brand_id),
                 country_id: source_country_id
-            },
-            include: { brand: true }
+            }
         });
+
+        const limit = pageSize * 10;
+
+        const sourceProducts = await prisma.$queryRaw`
+            SELECT * FROM "Product"
+            WHERE brand_id = ${parseInt(brand_id)} AND country_id = ${source_country_id}
+            ORDER BY RANDOM()
+            LIMIT ${limit}
+        `;
 
         if (!sourceProducts.length) {
             return res.status(404).json({
@@ -36,14 +47,6 @@ exports.getBrandCommonProducts = async (req, res) => {
                 country_id: destination_country_id
             }
         });
-
-        if (!destinationProducts.length) {
-            return res.status(404).json({
-                success: false,
-                message: "No matching products found in the destination country",
-                products: []
-            });
-        }
 
         const destinationMap = {};
         destinationProducts.forEach(p => {
@@ -70,15 +73,16 @@ exports.getBrandCommonProducts = async (req, res) => {
                 sourceProduct.price
             );
 
+            const brand = await prisma.brand.findUnique({
+                where: { id: sourceProduct.brand_id }
+            });
+
             results.push({
                 product_id: sourceProduct.id,
                 sku_id: sourceProduct.sku_id,
                 product_name: sourceProduct.name,
-                price: sourceProduct.price,
-                images: sourceProduct.images,
-                currency: sourceProduct.currency,
-                is_favourite: false,
-                brand_name: sourceProduct.brand?.name || "Unknown",
+                images: [sourceProduct.images[0]],
+                brand_name: brand ? brand.name : "Unknown",
                 source_country_details: {
                     product_url: sourceProduct.url || "",
                     original: diff.sourcePriceOriginal,
@@ -96,18 +100,18 @@ exports.getBrandCommonProducts = async (req, res) => {
             });
         }
 
-        if (!results.length) {
-            return res.status(404).json({
-                success: false,
-                message: "No common products found between source and destination countries",
-                products: []
-            });
-        }
+        const totalPages = Math.ceil(results.length / pageSize);
+
+        const paginatedResults = results.slice((page - 1) * pageSize, page * pageSize);
 
         return res.json({
             success: true,
             message: "Brand common products retrieved successfully",
-            products: results
+            currentPage: page,
+            totalPages: totalPages,
+            pageSize,
+            totalItems: results.length,
+            brandProducts: paginatedResults
         });
 
     } catch (err) {
