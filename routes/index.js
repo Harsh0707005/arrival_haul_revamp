@@ -14,12 +14,14 @@ const { getCountryExclusiveProducts } = require('../controllers/countryExclusive
 const { getRecommendedProducts } = require('../controllers/recommendationController');
 const { getBrandCommonProducts } = require('../controllers/brandCommonProducts');
 const { getCategoryCommonProducts } = require('../controllers/categoryCommonProducts');
-const { updateUserName } = require('../controllers/updateName');
+const { updateUserDetails } = require('../controllers/updateUserDetails');
+const { getUserWithCategories } = require('../controllers/fetchInterestedCategories');
 
 router.post('/signup', signup);
 router.post('/login', login);
 router.get('/user-details', authMiddleware, getUserDetails);
-router.put('/user/update', authMiddleware, updateUserName);
+router.put('/user/update', authMiddleware, updateUserDetails);
+router.get('/user/interested-categories', authMiddleware, getUserWithCategories);
 
 router.get("/country-exclusives", authMiddleware, getCountryExclusiveProducts)
 

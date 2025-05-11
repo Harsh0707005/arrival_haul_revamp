@@ -8,19 +8,20 @@ datasource db {
 }
 
 model User {
-    id                     Int      @id @default(autoincrement())
+    id                     Int        @id @default(autoincrement())
     firstName              String
     lastName               String
-    email                  String   @unique
-    mobile                 String   @unique
+    email                  String     @unique
+    mobile                 String     @unique
     password               String
     token                  String?
-    sourceCountry          Country  @relation("SourceCountry", fields: [source_country_id], references: [id])
+    sourceCountry          Country    @relation("SourceCountry", fields: [source_country_id], references: [id])
     source_country_id      Int
-    destinationCountry     Country  @relation("DestinationCountry", fields: [destination_country_id], references: [id])
+    destinationCountry     Country    @relation("DestinationCountry", fields: [destination_country_id], references: [id])
     destination_country_id Int
-    createdAt              DateTime @default(now())
-    updatedAt              DateTime @updatedAt
+    createdAt              DateTime   @default(now())
+    updatedAt              DateTime   @updatedAt
+    interestedCategories   Category[] @relation("UserInterestedCategories")
 }
 
 model Product {
@@ -51,11 +52,12 @@ model Brand {
 }
 
 model Category {
-    id        Int       @id @default(autoincrement())
-    name      String    @unique
-    products  Product[]
-    createdAt DateTime  @default(now())
-    updatedAt DateTime  @updatedAt
+    id              Int       @id @default(autoincrement())
+    name            String    @unique
+    products        Product[]
+    createdAt       DateTime  @default(now())
+    updatedAt       DateTime  @updatedAt
+    interestedUsers User[]    @relation("UserInterestedCategories")
 }
 
 model Country {
