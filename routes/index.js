@@ -16,12 +16,15 @@ const { getBrandCommonProducts } = require('../controllers/brandCommonProducts')
 const { getCategoryCommonProducts } = require('../controllers/categoryCommonProducts');
 const { updateUserDetails } = require('../controllers/updateUserDetails');
 const { getUserWithCategories } = require('../controllers/fetchInterestedCategories');
+const { otpGeneration } = require('../controllers/otpController');
 
 router.post('/signup', signup);
 router.post('/login', login);
 router.get('/user-details', authMiddleware, getUserDetails);
 router.put('/user/update', authMiddleware, updateUserDetails);
 router.get('/user/interested-categories', authMiddleware, getUserWithCategories);
+
+router.post("/user/generate-otp", otpGeneration);
 
 router.get("/country-exclusives", authMiddleware, getCountryExclusiveProducts)
 
