@@ -31,7 +31,6 @@ exports.getCountryExclusiveProducts = async (req, res) => {
         const totalPages = Math.ceil(totalItems / pageSize);
         const limit = pageSize * 10; // Page size multiplier
 
-        // Step 3: Get exclusive products from the source country
         const exclusiveProducts = await prisma.product.findMany({
             where: {
                 country_id: source_country_id,

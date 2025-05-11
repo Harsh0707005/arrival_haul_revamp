@@ -13,12 +13,13 @@ model User {
     lastName               String
     email                  String     @unique
     mobile                 String     @unique
+    countryCode            Int        @default(102)
     password               String
     token                  String?
     sourceCountry          Country    @relation("SourceCountry", fields: [source_country_id], references: [id])
-    source_country_id      Int
+    source_country_id      Int        @default(1)
     destinationCountry     Country    @relation("DestinationCountry", fields: [destination_country_id], references: [id])
-    destination_country_id Int
+    destination_country_id Int        @default(2)
     createdAt              DateTime   @default(now())
     updatedAt              DateTime   @updatedAt
     interestedCategories   Category[] @relation("UserInterestedCategories")
