@@ -49,16 +49,37 @@ exports.getCommonCategories = async (req, res) => {
                 }
             });
 
+            const sourceProductMap = new Map();
+            sourceProducts.forEach(p => {
+                if (!sourceProductMap.has(p.sku_id)) {
+                    sourceProductMap.set(p.sku_id, p.price);
+                }
+            });
+
             const destinationProductMap = new Map();
-            destinationProducts.forEach(p => destinationProductMap.set(p.sku_id, p.price));
+            destinationProducts.forEach(p => {
+                if (!destinationProductMap.has(p.sku_id)) {
+                    destinationProductMap.set(p.sku_id, p.price);
+                }
+            });
+
+            const commonSkus = new Set(
+                [...sourceProductMap.keys()].filter(sku => destinationProductMap.has(sku))
+            );
 
             let sourceTotal = 0;
             let destinationTotal = 0;
 
-            for (const sp of sourceProducts) {
-                if (destinationProductMap.has(sp.sku_id)) {
-                    sourceTotal += sp.price;
-                    destinationTotal += destinationProductMap.get(sp.sku_id);
+            for (const sku of commonSkus) {
+                const sourcePrice = sourceProductMap.get(sku);
+                const destinationPrice = destinationProductMap.get(sku);
+
+                const priceDiff = Math.abs(sourcePrice - destinationPrice);
+                const percentageDiff = priceDiff / Math.max(sourcePrice, destinationPrice);
+
+                if (percentageDiff < 0.9) {
+                    sourceTotal += sourcePrice;
+                    destinationTotal += destinationPrice;
                 }
             }
 
