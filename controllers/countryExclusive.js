@@ -92,7 +92,6 @@ exports.getCountryExclusiveProducts = async (req, res) => {
                 };
             }));
 
-            // Add newly fetched products to response and ensure uniqueness
             for (const formatted of formattedProducts) {
                 if (formatted && !processedSkuSet.has(formatted.sku_id)) {
                     processedSkuSet.add(formatted.sku_id);
