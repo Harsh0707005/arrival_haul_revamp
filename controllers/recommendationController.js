@@ -98,6 +98,8 @@ exports.getRecommendedProducts = async (req, res) => {
             const diff = await calculatePriceDifference(source_country_id, destination_country_id, product.price, destinationProduct.price);
             const swap_diff = await calculatePriceDifference(destination_country_id, source_country_id, destinationProduct.price, product.price);
 
+            if (diff.percentageDifference < -60 || diff.percentageDifference > 70) return null;
+
             const brand = await prisma.brand.findUnique({ where: { id: product.brand_id } });
             const country = await prisma.country.findUnique({ where: { id: product.country_id } });
 
