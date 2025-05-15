@@ -24,24 +24,34 @@ const calculatePriceDifference = asyncHandler(async (
     if (isNaN(parsedSourcePrice) || isNaN(parsedDestinationPrice)) {
         throw new Error('Invalid price values provided');
     }
+    if (parsedDestinationPrice <= 0) {
+        throw new Error('Destination price must be greater than zero');
+    }
 
     const exchangeRateDetails = await getExchangeRate(sourceCountryId, destinationCountryId);
-    const exchangeRate = exchangeRateDetails.exchangeRate;
+    const { exchangeRate, sourceCurrency, destinationCurrency } = exchangeRateDetails;
 
+    // const exchangeRate = exchangeRateDetails.exchangeRate;
     const sourcePriceInDestinationCurrency = parseFloat((parsedSourcePrice * exchangeRate).toFixed(2));
     const destinationPriceInSourceCurrency = parseFloat((parsedDestinationPrice / exchangeRate).toFixed(2));
 
-    const sourceCurrency = exchangeRateDetails.sourceCurrency;
-    const destinationCurrency = exchangeRateDetails.destinationCurrency;
+    // const sourceCurrency = exchangeRateDetails.sourceCurrency;
+    // const destinationCurrency = exchangeRateDetails.destinationCurrency;
+
+    // const priceDifference = sourcePriceInDestinationCurrency - parsedDestinationPrice;
+    // let percentageDifference = 0;
+
+    // if (sourcePriceInDestinationCurrency > 0) {
+    //     percentageDifference = (priceDifference / sourcePriceInDestinationCurrency) * 100;
+    // }
+
+    // percentageDifference = parseFloat(percentageDifference.toFixed(2));
+
+    // new formula:  ((source price in destination currency) / destination price) - 1) * 100
+    let percentageDifference = ((sourcePriceInDestinationCurrency / parsedDestinationPrice) - 1) * 100;
+    percentageDifference = parseFloat(percentageDifference.toFixed(2));
 
     const priceDifference = sourcePriceInDestinationCurrency - parsedDestinationPrice;
-    let percentageDifference = 0;
-
-    if (sourcePriceInDestinationCurrency > 0) {
-        percentageDifference = (priceDifference / sourcePriceInDestinationCurrency) * 100;
-    }
-
-    percentageDifference = parseFloat(percentageDifference.toFixed(2));
 
     return {
         sourcePriceOriginal: parsedSourcePrice,
