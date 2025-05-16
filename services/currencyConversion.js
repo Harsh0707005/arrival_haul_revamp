@@ -24,9 +24,9 @@ const calculatePriceDifference = asyncHandler(async (
     if (isNaN(parsedSourcePrice) || isNaN(parsedDestinationPrice)) {
         throw new Error('Invalid price values provided');
     }
-    if (parsedDestinationPrice <= 0) {
-        throw new Error('Destination price must be greater than zero');
-    }
+    // if (parsedDestinationPrice <= 0) {
+    //     throw new Error('Destination price must be greater than zero');
+    // }
 
     const exchangeRateDetails = await getExchangeRate(sourceCountryId, destinationCountryId);
     const { exchangeRate, sourceCurrency, destinationCurrency } = exchangeRateDetails;
