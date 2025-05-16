@@ -23,33 +23,34 @@ model User {
     createdAt              DateTime   @default(now())
     updatedAt              DateTime   @updatedAt
     interestedCategories   Category[] @relation("UserInterestedCategories")
+    wishlists              Wishlist[]
 }
 
 model Otp {
-  id         Int      @id @default(autoincrement())
-  email      String   @unique
-  otp        String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+    id        Int      @id @default(autoincrement())
+    email     String   @unique
+    otp       String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
 }
 
-
 model Product {
-    id          Int      @id @default(autoincrement())
+    id          Int        @id @default(autoincrement())
     name        String
     description String
     url         String
     images      String[]
     sku_id      String
-    country     Country  @relation(fields: [country_id], references: [id])
+    country     Country    @relation(fields: [country_id], references: [id])
     country_id  Int
-    brand       Brand    @relation(fields: [brand_id], references: [id])
+    brand       Brand      @relation(fields: [brand_id], references: [id])
     brand_id    Int
-    category    Category @relation(fields: [category_id], references: [id])
+    category    Category   @relation(fields: [category_id], references: [id])
     category_id Int
     price       Float
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @updatedAt
+    createdAt   DateTime   @default(now())
+    updatedAt   DateTime   @updatedAt
+    wishlists   Wishlist[]
 }
 
 model Brand {
@@ -97,4 +98,15 @@ model ExchangeRate {
     updatedAt DateTime @updatedAt
 
     @@unique([fromId, toId])
+}
+
+model Wishlist {
+    id        Int      @id @default(autoincrement())
+    user      User     @relation(fields: [userId], references: [id])
+    userId    Int
+    product   Product  @relation(fields: [productId], references: [id])
+    productId Int
+    createdAt DateTime @default(now())
+
+    @@unique([userId, productId])
 }

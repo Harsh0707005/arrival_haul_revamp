@@ -19,12 +19,17 @@ const { getUserWithCategories } = require('../controllers/fetchInterestedCategor
 const { otpGeneration } = require('../controllers/otpController');
 const { validateSignup } = require('../controllers/validateOTPAndSignup');
 const { deleteUser } = require('../controllers/deleteUser');
+const { toggleWishlist } = require('../controllers/toggleWishlistController');
+const { getWishlistProducts } = require('../controllers/fetchWishlistController');
 
 // router.post('/signup', signup);
 router.post('/login', login);
 router.get('/user-details', authMiddleware, getUserDetails);
 router.put('/user/update', authMiddleware, updateUserDetails);
 router.get('/user/interested-categories', authMiddleware, getUserWithCategories);
+
+router.post('/wishlist', authMiddleware, toggleWishlist);
+router.get('/wishlist-list', authMiddleware, getWishlistProducts)
 
 router.delete('/user/delete', deleteUser)
 
