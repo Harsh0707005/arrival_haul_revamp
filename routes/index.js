@@ -21,6 +21,7 @@ const { validateSignup } = require('../controllers/validateOTPAndSignup');
 const { deleteUser } = require('../controllers/deleteUser');
 const { toggleWishlist } = require('../controllers/toggleWishlistController');
 const { getWishlistProducts } = require('../controllers/fetchWishlistController');
+const { resetPassword } = require('../controllers/resetPasswordController');
 
 // router.post('/signup', signup);
 router.post('/login', login);
@@ -35,6 +36,7 @@ router.delete('/user/delete', deleteUser)
 
 router.post("/user/generate-otp", otpGeneration);
 router.post("/user/validation-signup", validateSignup);
+router.post("/user/reset-password", resetPassword);
 
 router.get("/country-exclusives", authMiddleware, getCountryExclusiveProducts)
 
