@@ -7,6 +7,14 @@ exports.getWishlistProducts = async (req, res) => {
     try {
         const userId = req.user.id;
         const { source_country_id, destination_country_id } = req.user;
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 10;
+
+        const totalItems = await prisma.wishlist.count({
+            where: { userId }
+        });
+
+        const totalPages = Math.ceil(totalItems / pageSize);
 
         const wishlistEntries = await prisma.wishlist.findMany({
             where: { userId },
@@ -14,14 +22,19 @@ exports.getWishlistProducts = async (req, res) => {
                 product: {
                     include: { brand: true, country: true }
                 }
-            }
+            },
+            skip: (page - 1) * pageSize,
+            take: pageSize
         });
 
         if (!wishlistEntries.length) {
             return res.json({
                 success: true,
-                message: "Wishlist is empty",
-                wishlistProducts: []
+                currentPage: page,
+                totalPages,
+                pageSize,
+                totalItems: 0,
+                wishlist_products: []
             });
         }
 
@@ -105,10 +118,17 @@ exports.getWishlistProducts = async (req, res) => {
                     sku_id: product.sku_id,
                     product_name: product.name,
                     product_description: product.description,
-                    brand: product.brand?.name || "Unknown",
-                    country_name: product.country?.name || "Unknown",
+                    brand: {
+                        brand_id: product.brand?.id || null,
+                        brand_name: product.brand?.name || null
+                    },
+                    category: {
+                        category_id: product.category?.id || null,
+                        category_name: product.category?.name || null
+                    },
                     images: product.images?.length ? [product.images[0]] : [],
                     presence,
+                    is_favourite: true,
                     source_country_details: sourceBlock,
                     destination_country_details: destBlock
                 };
@@ -117,15 +137,17 @@ exports.getWishlistProducts = async (req, res) => {
 
         return res.json({
             success: true,
-            message: "Wishlist products fetched successfully",
-            wishlistProducts
+            currentPage: page,
+            totalPages,
+            pageSize,
+            totalItems,
+            wishlist_products: wishlistProducts
         });
     } catch (error) {
         console.error("Error fetching wishlist products:", error);
         return res.status(500).json({
             success: false,
-            message: "Internal Server Error",
-            wishlistProducts: []
+            message: "Internal Server Error"
         });
     }
 };
