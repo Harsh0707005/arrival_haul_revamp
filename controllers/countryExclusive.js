@@ -8,120 +8,97 @@ exports.getCountryExclusiveProducts = async (req, res) => {
         const { source_country_id, destination_country_id } = req.user;
         const page = parseInt(req.query.page) || 1;
         const pageSize = parseInt(req.query.pageSize) || 10;
-        const MIN_REQUIRED = pageSize;
-        const MAX_ATTEMPTS = 5;
 
-        const destinationSkus = await prisma.product.findMany({
-            where: { country_id: destination_country_id },
-            select: { sku_id: true }
+        const totalItems = await prisma.$queryRaw`
+            SELECT COUNT(*)::int as count
+            FROM "Product" p1
+            WHERE p1.country_id = ${source_country_id}
+            AND NOT EXISTS (
+                SELECT 1 FROM "Product" p2
+                WHERE p2.country_id = ${destination_country_id}
+                AND p2.sku_id = p1.sku_id
+            )
+        `;
+
+        const totalPages = Math.ceil(totalItems[0].count / pageSize);
+
+        const exclusiveProducts = await prisma.$queryRaw`
+            SELECT 
+                p1.id::int as id,
+                p1.sku_id,
+                p1.name,
+                p1.description,
+                p1.price::float as price,
+                p1.images,
+                b.name as brand_name,
+                b.id::int as brand_id,
+                c.name as category_name,
+                c.id::int as category_id
+            FROM "Product" p1
+            LEFT JOIN "Brand" b ON p1.brand_id = b.id
+            LEFT JOIN "Category" c ON p1.category_id = c.id
+            WHERE p1.country_id = ${source_country_id}
+            AND NOT EXISTS (
+                SELECT 1 FROM "Product" p2
+                WHERE p2.country_id = ${destination_country_id}
+                AND p2.sku_id = p1.sku_id
+            )
+            ORDER BY RANDOM()
+            LIMIT ${pageSize}
+            OFFSET ${(page - 1) * pageSize}
+        `;
+
+        const wishlistEntries = await prisma.wishlist.findMany({
+            where: {
+                userId: req.user.id,
+                productId: {
+                    in: exclusiveProducts.map(p => p.id)
+                }
+            }
         });
 
-        const destinationSkuSet = new Set(destinationSkus.map(p => p.sku_id));
+        const wishlistedProductIds = new Set(wishlistEntries.map(entry => entry.productId));
 
-        const batchSize = 6000;
-        const promises = [];
-
-        for (let i = 0; i < destinationSkuSet.length; i += batchSize) {
-            const batch = destinationSkuSet.slice(i, i + batchSize);
-            promises.push(
-                prisma.product.count({
-                    where: {
-                        country_id: source_country_id,
-                        NOT: {
-                            sku_id: {
-                                in: batch
-                            }
-                        }
-                    }
-                })
+        const formattedProducts = await Promise.all(exclusiveProducts.map(async (product) => {
+            const diff = await calculatePriceDifference(
+                source_country_id,
+                destination_country_id,
+                product.price,
+                0
             );
-        }
 
-        const counts = await Promise.all(promises);
-
-        const totalItems = counts.reduce((sum, count) => sum + count, 0);
-
-
-        const totalPages = Math.ceil(totalItems / pageSize);
-
-        const processedSkuSet = new Set();
-        const responseProducts = [];
-        let attempts = 0;
-
-        while (responseProducts.length < MIN_REQUIRED && attempts < MAX_ATTEMPTS) {
-            attempts++;
-
-            const batchSize = pageSize * 10;
-
-            const exclusiveProducts = await prisma.product.findMany({
-                where: {
-                    country_id: source_country_id,
-                    NOT: {
-                        sku_id: {
-                            in: Array.from(destinationSkuSet)
-                        }
-                    }
+            return {
+                product_id: product.id,
+                sku_id: product.sku_id,
+                product_name: product.name,
+                product_description: product.description,
+                brand: {
+                    brand_id: product.brand_id || null,
+                    brand_name: product.brand_name || null
                 },
-                include: {
-                    brand: true,
-                    category: true
+                category: {
+                    category_id: product.category_id || null,
+                    category_name: product.category_name || null
                 },
-                take: batchSize,
-                skip: (page - 1) * pageSize
-            });
-
-            const newExclusiveProducts = exclusiveProducts.filter(p => !processedSkuSet.has(p.sku_id));
-            if (newExclusiveProducts.length === 0) break;
-
-            const formattedProducts = await Promise.all(newExclusiveProducts.map(async (product) => {
-                const diff = await calculatePriceDifference(
-                    source_country_id,
-                    destination_country_id,
-                    product.price,
-                    0
-                );
-
-                return {
-                    product_id: product.id,
-                    sku_id: product.sku_id,
-                    product_name: product.name,
-                    product_description: product.description,
-                    brand: {
-                        brand_id: product.brand?.id || null,
-                        brand_name: product.brand?.name || null
-                    },
-                    category: {
-                        category_id: product.category?.id || null,
-                        category_name: product.category?.name || null
-                    },
-                    images: [product.images[0]],
-                    source_country_details: {
-                        original: diff.sourcePriceOriginal,
-                        converted: diff.destinationPriceConverted,
-                        price_difference_percentage: diff.percentageDifference,
-                        currency: diff.sourceCurrency
-                    },
-                    destination_country_details: {}
-                };
-            }));
-
-            for (const formatted of formattedProducts) {
-                if (formatted && !processedSkuSet.has(formatted.sku_id)) {
-                    processedSkuSet.add(formatted.sku_id);
-                    responseProducts.push(formatted);
-                }
-                if (responseProducts.length >= MIN_REQUIRED) break;
-            }
-        }
-
-        const finalResults = responseProducts.slice(0, pageSize);
+                images: product.images?.length ? [product.images[0]] : [],
+                is_favourite: wishlistedProductIds.has(product.id),
+                source_country_details: {
+                    original: diff.sourcePriceOriginal,
+                    converted: diff.destinationPriceConverted,
+                    price_difference_percentage: diff.percentageDifference,
+                    currency: diff.sourceCurrency
+                },
+                destination_country_details: {}
+            };
+        }));
 
         return res.json({
+            success: true,
             currentPage: page,
-            totalPages: totalPages,
+            totalPages,
             pageSize,
-            totalItems: finalResults.length,
-            exclusive_products: finalResults
+            totalItems: totalItems[0].count,
+            exclusive_products: formattedProducts
         });
 
     } catch (err) {
