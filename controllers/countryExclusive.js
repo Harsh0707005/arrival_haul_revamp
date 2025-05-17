@@ -18,16 +18,29 @@ exports.getCountryExclusiveProducts = async (req, res) => {
 
         const destinationSkuSet = new Set(destinationSkus.map(p => p.sku_id));
 
-        const totalItems = await prisma.product.count({
-            where: {
-                country_id: source_country_id,
-                NOT: {
-                    sku_id: {
-                        in: Array.from(destinationSkuSet)
+        const batchSize = 6000;
+        const promises = [];
+
+        for (let i = 0; i < destinationSkuSet.length; i += batchSize) {
+            const batch = destinationSkuSet.slice(i, i + batchSize);
+            promises.push(
+                prisma.product.count({
+                    where: {
+                        country_id: source_country_id,
+                        NOT: {
+                            sku_id: {
+                                in: batch
+                            }
+                        }
                     }
-                }
-            }
-        });
+                })
+            );
+        }
+
+        const counts = await Promise.all(promises);
+
+        const totalItems = counts.reduce((sum, count) => sum + count, 0);
+
 
         const totalPages = Math.ceil(totalItems / pageSize);
 
@@ -38,7 +51,7 @@ exports.getCountryExclusiveProducts = async (req, res) => {
         while (responseProducts.length < MIN_REQUIRED && attempts < MAX_ATTEMPTS) {
             attempts++;
 
-            const batchSize = pageSize * 10; // Page size multiplier
+            const batchSize = pageSize * 10;
 
             const exclusiveProducts = await prisma.product.findMany({
                 where: {
