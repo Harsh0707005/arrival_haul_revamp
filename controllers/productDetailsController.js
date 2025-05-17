@@ -38,6 +38,16 @@ exports.getProductDetails = async (req, res) => {
             return res.json({ message: "No Product Details found" });
         }
 
+        // Check if product is in user's wishlist
+        const wishlistEntry = await prisma.wishlist.findUnique({
+            where: {
+                userId_productId: {
+                    userId: req.user.id,
+                    productId: parseInt(product_id)
+                }
+            }
+        });
+
         const destinationProduct = await prisma.product.findFirst({
             where: {
                 country_id: destination_country_id,
@@ -71,7 +81,7 @@ exports.getProductDetails = async (req, res) => {
             brand_name: product.brand?.name || "Unknown",
             brand_image_url: product.brand?.image || "",
             country_name: product.country?.name || "Unknown",
-            is_favourite: false,
+            is_favourite: !!wishlistEntry,
             images: product.images,
             source_country_details: {
                 product_url: product.url,
