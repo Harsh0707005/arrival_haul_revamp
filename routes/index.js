@@ -22,6 +22,7 @@ const { deleteUser } = require('../controllers/deleteUser');
 const { toggleWishlist } = require('../controllers/toggleWishlistController');
 const { getWishlistProducts } = require('../controllers/fetchWishlistController');
 const { resetPassword } = require('../controllers/resetPasswordController');
+const { searchProducts } = require('../controllers/searchProductsController');
 
 // router.post('/signup', signup);
 router.post('/login', login);
@@ -37,6 +38,7 @@ router.delete('/user/delete', deleteUser)
 router.post("/user/generate-otp", otpGeneration);
 router.post("/user/validation-signup", validateSignup);
 router.post("/user/reset-password", resetPassword);
+router.get("/search", authMiddleware, searchProducts);
 
 router.get("/country-exclusives", authMiddleware, getCountryExclusiveProducts)
 
