@@ -7,10 +7,10 @@ exports.otpGeneration = async (req, res) => {
   try {
     const { email, firstName } = req.body;
 
-    if (!email || !firstName) {
+    if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Email and firstName are required",
+        message: "Email is required",
       });
     }
 
@@ -26,7 +26,7 @@ exports.otpGeneration = async (req, res) => {
       to: email,
       subject: "Your OTP Code",
       html: `
-        <p>Hi <b>${firstName}</b>,</p>
+        <p>${firstName ? `Hi <b>${firstName}</b>,` : 'Hello,'}</p>
         <p>Your OTP code is: <b>${otp}</b></p>
         <p>This code is valid for a limited time. Do not share it with anyone.</p>
       `,
