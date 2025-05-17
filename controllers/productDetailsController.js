@@ -38,7 +38,6 @@ exports.getProductDetails = async (req, res) => {
             return res.json({ message: "No Product Details found" });
         }
 
-        // Check if product is in user's wishlist
         const wishlistEntry = await prisma.wishlist.findUnique({
             where: {
                 userId_productId: {

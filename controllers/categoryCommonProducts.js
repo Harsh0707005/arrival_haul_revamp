@@ -53,6 +53,17 @@ exports.getCategoryCommonProducts = async (req, res) => {
             destinationMap[p.sku_id] = p;
         });
 
+        const wishlistEntries = await prisma.wishlist.findMany({
+            where: {
+                userId: req.user.id,
+                productId: {
+                    in: sourceProducts.map(p => p.id)
+                }
+            }
+        });
+
+        const wishlistedProductIds = new Set(wishlistEntries.map(entry => entry.productId));
+
         const results = [];
 
         for (const sourceProduct of sourceProducts) {
@@ -84,7 +95,7 @@ exports.getCategoryCommonProducts = async (req, res) => {
                 price: sourceProduct.price,
                 images: sourceProduct.images,
                 currency: sourceProduct.currency,
-                is_favourite: false,
+                is_favourite: wishlistedProductIds.has(sourceProduct.id),
                 brand_name: brand ? brand.name : "Unknown",
                 source_country_details: {
                     product_url: sourceProduct.url || "",
