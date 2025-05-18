@@ -61,9 +61,23 @@ exports.resetPassword = async (req, res) => {
             where: { email }
         });
 
+        const updatedUser = await prisma.user.findUnique({
+            where: { email },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                mobile: true,
+                source_country_id: true,
+                destination_country_id: true
+            }
+        });
+
         return res.json({
             success: true,
-            message: "Password reset successful"
+            message: "Password reset successful",
+            user: updatedUser
         });
 
     } catch (error) {
