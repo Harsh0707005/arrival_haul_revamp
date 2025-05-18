@@ -88,7 +88,12 @@ exports.getCountryExclusiveProducts = async (req, res) => {
                     price_difference_percentage: diff.percentageDifference,
                     currency: diff.sourceCurrency
                 },
-                destination_country_details: {}
+                destination_country_details: {
+                    original: 0,
+                    converted: 0,
+                    price_difference_percentage: 0,
+                    currency: diff.destinationCurrency
+                }
             };
         }));
 
