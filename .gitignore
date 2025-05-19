@@ -1,5 +1,6 @@
 node_modules
 *.json
 !prisma/countries.json
+!utils/product_identifiers.json
 *.zip
 venv/
