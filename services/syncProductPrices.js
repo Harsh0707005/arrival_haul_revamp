@@ -93,7 +93,7 @@ function extractPrice(text, country) {
         const currency = match[1] || match[3] || '';
         let price = match[2].replace(/\s/g, '');
         
-        if (currency === '€') {
+        if (currency === '€' || currency.toLowerCase() === 'kr') {
             price = price.replace(/\./g, '').replace(/,/g, '.');
         } else {
             const parts = price.split('.');
