@@ -9,25 +9,60 @@ exports.getWishlistProducts = async (req, res) => {
         const { source_country_id, destination_country_id } = req.user;
         const page = parseInt(req.query.page) || 1;
         const pageSize = parseInt(req.query.pageSize) || 10;
+        const filter = req.query.filter || 'common';
 
-        const totalItems = await prisma.wishlist.count({
-            where: { userId }
-        });
-
-        const totalPages = Math.ceil(totalItems / pageSize);
-
-        const wishlistEntries = await prisma.wishlist.findMany({
+        const baseQuery = {
             where: { userId },
             include: {
                 product: {
                     include: { brand: true, country: true }
                 }
             },
-            skip: (page - 1) * pageSize,
-            take: pageSize
-        });
+            orderBy: {
+                createdAt: 'desc'
+            }
+        };
 
-        if (!wishlistEntries.length) {
+        const allWishlistEntries = await prisma.wishlist.findMany(baseQuery);
+
+        let filteredEntries = [];
+        for (const entry of allWishlistEntries) {
+            const product = entry.product;
+            const counterpart = await prisma.product.findFirst({
+                where: {
+                    sku_id: product.sku_id,
+                    country_id: product.country_id === source_country_id ? destination_country_id : source_country_id
+                }
+            });
+
+            let presence = "common";
+            if (!counterpart) {
+                if (product.country_id === source_country_id) {
+                    presence = "source";
+                } else if (product.country_id === destination_country_id) {
+                    presence = "destination";
+                } else {
+                    presence = "others";
+                }
+            }
+
+            if (filter === 'common' && presence === 'common') {
+                filteredEntries.push(entry);
+            } else if (filter === 'source' && presence === 'source') {
+                filteredEntries.push(entry);
+            } else if (filter === 'destination' && presence === 'destination') {
+                filteredEntries.push(entry);
+            } else if (filter === 'others' && presence === 'others') {
+                filteredEntries.push(entry);
+            }
+        }
+
+        const totalItems = filteredEntries.length;
+        const totalPages = Math.ceil(totalItems / pageSize);
+        const startIndex = (page - 1) * pageSize;
+        const paginatedEntries = filteredEntries.slice(startIndex, startIndex + pageSize);
+
+        if (!paginatedEntries.length) {
             return res.json({
                 success: true,
                 currentPage: page,
@@ -39,7 +74,7 @@ exports.getWishlistProducts = async (req, res) => {
         }
 
         const wishlistProducts = await Promise.all(
-            wishlistEntries.map(async ({ product }) => {
+            paginatedEntries.map(async ({ product }) => {
                 const counterpart =
                     product.country_id === source_country_id
                         ? await prisma.product.findFirst({
@@ -57,8 +92,13 @@ exports.getWishlistProducts = async (req, res) => {
 
                 let presence = "common";
                 if (!counterpart) {
-                    presence =
-                        product.country_id === source_country_id ? "source" : "destination";
+                    if (product.country_id === source_country_id) {
+                        presence = "source";
+                    } else if (product.country_id === destination_country_id) {
+                        presence = "destination";
+                    } else {
+                        presence = "others";
+                    }
                 }
 
                 let sourceBlock = {};
@@ -104,7 +144,20 @@ exports.getWishlistProducts = async (req, res) => {
                         price_difference_percentage: null,
                         currency: product.country.currencySymbol
                     };
+                } else if (presence === "destination") {
+                    destBlock = {
+                        original: product.price,
+                        converted: null,
+                        price_difference_percentage: null,
+                        currency: product.country.currencySymbol
+                    };
                 } else {
+                    sourceBlock = {
+                        original: null,
+                        converted: null,
+                        price_difference_percentage: null,
+                        currency: null
+                    };
                     destBlock = {
                         original: product.price,
                         converted: null,
