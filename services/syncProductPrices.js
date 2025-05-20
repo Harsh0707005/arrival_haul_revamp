@@ -184,134 +184,159 @@ function extractData($, selectors, url) {
 
 async function scrapeProducts() {
     let writeStream;
+    const BATCH_SIZE = 100;
+    let skip = 0;
+    let hasMoreProducts = true;
+    let totalSuccessCount = 0;
+    let totalFailureCount = 0;
+    let totalProcessed = 0;
+
     try {
         writeStream = fs.createWriteStream('data.json');
         writeStream.write('[\n');
-
-        const products = await prisma.product.findMany({
-            where: {
-                url: {
-                    not: ''
-                }
-            },
-            include: {
-                country: true,
-                brand: true,
-                category: true
-            }
-        });
-
-        let successCount = 0;
-        let failureCount = 0;
         let isFirstItem = true;
 
-        for (const product of products) {
-            try {
-                const domain = extractDomain(product.url);
-                if (!domain || !productIdentifiers[domain]) {
-                    console.log(`No scraping rules found for domain: ${domain}`);
-                    failureCount++;
-                    continue;
-                }
-
-                const rules = productIdentifiers[domain];
-                const html = await getHtmlContent(product.url, rules.loads_with_js);
-                
-                if (!html) {
-                    console.log(`Failed to fetch content for: ${product.url}`);
-                    failureCount++;
-                    continue;
-                }
-
-                const $ = cheerio.load(html);
-                
-                if (!$(rules.product_page_validator).length) {
-                    console.log(`Not a valid product page: ${product.url}`);
-                    failureCount++;
-                    continue;
-                }
-
-                const extractedData = extractData($, rules, product.url);
-
-                const favicon = $('link[rel="icon"], link[rel="shortcut icon"]').attr('href');
-                const websiteLogo = favicon ? new URL(favicon, product.url).href : '';
-
-                const priceData = extractPrice(extractedData.product_price, product.country);
-                const numericPrice = getNumericPrice(priceData.price);
-
-                const formattedData = {
-                    site_name: rules.site_name,
-                    product_url: product.url,
-                    product_id: extractedData.product_id || product.id.toString(),
-                    product_name: extractedData.product_name || product.name,
-                    product_unique_id: extractedData.product_unique_id || '',
-                    product_description: extractedData.product_description || product.description,
-                    product_country: {
-                        country_id: product.country.id.toString(),
-                        country_name: product.country.name,
-                        country_code: product.country.code,
-                        currency: product.country.currency,
-                        currency_symbol: product.country.currencySymbol,
-                        mobile_code: product.country.mobileCode
-                    },
-                    product_price: priceData.price,
-                    product_images: extractedData.product_images || product.images || [],
-                    product_brand_name: extractedData.product_brand_name || product.brand?.name || '',
-                    product_category: extractedData.product_category || product.category?.name || '',
-                    product_subcategory: extractedData.product_subcategory || '',
-                    website_logo: websiteLogo
-                };
-
-                if (
-                    formattedData.product_price !== '' &&
-                    numericPrice > 0 &&
-                    formattedData.product_name !== '' &&
-                    formattedData.product_description !== '' &&
-                    formattedData.product_url !== ''
-                ) {
-                    const jsonString = JSON.stringify(formattedData, null, 2);
-                    if (!isFirstItem) {
-                        writeStream.write(',\n');
+        while (hasMoreProducts) {
+            const products = await prisma.product.findMany({
+                where: {
+                    url: {
+                        not: ''
                     }
-                    writeStream.write(jsonString);
-                    isFirstItem = false;
+                },
+                include: {
+                    country: true,
+                    brand: true,
+                    category: true
+                },
+                take: BATCH_SIZE,
+                skip: skip
+            });
 
-                    try {
-                        await prisma.product.update({
-                            where: {
-                                id: product.id
-                            },
-                            data: {
-                                price: {
-                                    set: numericPrice
-                                }
-                            }
-                        });
-                        console.log(`Updated price in database for product ${product.id}: ${numericPrice.toFixed(2)}`);
-                    } catch (dbError) {
-                        console.error(`Failed to update price in database for product ${product.id}:`, dbError);
-                    }
-
-                    successCount++;
-                    console.log(`Successfully scraped: ${product.url}`);
-                } else {
-                    console.log(`Skipping product due to missing required fields: ${product.url}`);
-                    failureCount++;
-                }
-
-            } catch (error) {
-                console.error(`Error scraping product: ${product.url}`, error);
-                failureCount++;
+            if (products.length === 0) {
+                hasMoreProducts = false;
+                break;
             }
+
+            let successCount = 0;
+            let failureCount = 0;
+
+            for (const product of products) {
+                try {
+                    const domain = extractDomain(product.url);
+                    if (!domain || !productIdentifiers[domain]) {
+                        console.log(`No scraping rules found for domain: ${domain}`);
+                        failureCount++;
+                        continue;
+                    }
+
+                    const rules = productIdentifiers[domain];
+                    const html = await getHtmlContent(product.url, rules.loads_with_js);
+                    
+                    if (!html) {
+                        console.log(`Failed to fetch content for: ${product.url}`);
+                        failureCount++;
+                        continue;
+                    }
+
+                    const $ = cheerio.load(html);
+                    
+                    if (!$(rules.product_page_validator).length) {
+                        console.log(`Not a valid product page: ${product.url}`);
+                        failureCount++;
+                        continue;
+                    }
+
+                    const extractedData = extractData($, rules, product.url);
+
+                    const favicon = $('link[rel="icon"], link[rel="shortcut icon"]').attr('href');
+                    const websiteLogo = favicon ? new URL(favicon, product.url).href : '';
+
+                    const priceData = extractPrice(extractedData.product_price, product.country);
+                    const numericPrice = getNumericPrice(priceData.price);
+
+                    const formattedData = {
+                        site_name: rules.site_name,
+                        product_url: product.url,
+                        product_id: extractedData.product_id || product.id.toString(),
+                        product_name: extractedData.product_name || product.name,
+                        product_unique_id: extractedData.product_unique_id || '',
+                        product_description: extractedData.product_description || product.description,
+                        product_country: {
+                            country_id: product.country.id.toString(),
+                            country_name: product.country.name,
+                            country_code: product.country.code,
+                            currency: product.country.currency,
+                            currency_symbol: product.country.currencySymbol,
+                            mobile_code: product.country.mobileCode
+                        },
+                        product_price: priceData.price,
+                        product_images: extractedData.product_images || product.images || [],
+                        product_brand_name: extractedData.product_brand_name || product.brand?.name || '',
+                        product_category: extractedData.product_category || product.category?.name || '',
+                        product_subcategory: extractedData.product_subcategory || '',
+                        website_logo: websiteLogo
+                    };
+
+                    if (
+                        formattedData.product_price !== '' &&
+                        numericPrice > 0 &&
+                        formattedData.product_name !== '' &&
+                        formattedData.product_description !== '' &&
+                        formattedData.product_url !== ''
+                    ) {
+                        const jsonString = JSON.stringify(formattedData, null, 2);
+                        if (!isFirstItem) {
+                            writeStream.write(',\n');
+                        }
+                        writeStream.write(jsonString);
+                        isFirstItem = false;
+
+                        try {
+                            await prisma.product.update({
+                                where: {
+                                    id: product.id
+                                },
+                                data: {
+                                    price: {
+                                        set: numericPrice
+                                    }
+                                }
+                            });
+                            console.log(`Updated price in database for product ${product.id}: ${numericPrice.toFixed(2)}`);
+                        } catch (dbError) {
+                            console.error(`Failed to update price in database for product ${product.id}:`, dbError);
+                        }
+
+                        successCount++;
+                        console.log(`Successfully scraped: ${product.url}`);
+                    } else {
+                        console.log(`Skipping product due to missing required fields: ${product.url}`);
+                        failureCount++;
+                    }
+
+                } catch (error) {
+                    console.error(`Error scraping product: ${product.url}`, error);
+                    failureCount++;
+                }
+            }
+
+            totalSuccessCount += successCount;
+            totalFailureCount += failureCount;
+            totalProcessed += products.length;
+            skip += BATCH_SIZE;
+
+            console.log(`\nBatch Summary (${skip - BATCH_SIZE + 1} to ${skip}):`);
+            console.log(`Successfully scraped: ${successCount}`);
+            console.log(`Failed to scrape: ${failureCount}`);
         }
 
         writeStream.write('\n]');
         writeStream.end();
 
-        console.log('\nScraping Summary:');
-        console.log(`Total products processed: ${products.length}`);
-        console.log(`Successfully scraped: ${successCount}`);
-        console.log(`Failed to scrape: ${failureCount}`);
+        console.log('\nFinal Scraping Summary:');
+        console.log(`Total products processed: ${totalProcessed}`);
+        console.log(`Total successfully scraped: ${totalSuccessCount}`);
+        console.log(`Total failed to scrape: ${totalFailureCount}`);
         console.log('Data saved to data.json');
 
     } catch (error) {
