@@ -94,10 +94,7 @@ function extractPrice(text, country) {
         let price = match[2].replace(/\s/g, '');
         
         if (currency === '€') {
-            price = price
-                .replace(/\./g, 'TEMP_DOT')
-                .replace(/,/g, '.')
-                .replace(/TEMP_DOT/g, ',');
+            price = price.replace(/\./g, '').replace(/,/g, '.');
         } else {
             const parts = price.split('.');
             if (parts.length > 2) {
