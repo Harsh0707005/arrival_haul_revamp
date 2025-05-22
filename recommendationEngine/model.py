@@ -9,7 +9,7 @@ import psycopg2
 import sys
 import os
 import datetime
-from .config import DB_CONFIG
+from config import DB_CONFIG
 
 class RecommendationEngine:
     def __init__(self):

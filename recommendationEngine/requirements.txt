@@ -3,3 +3,4 @@ scipy
 scikit-learn
 numpy
 psycopg2-binary
+dotenv
