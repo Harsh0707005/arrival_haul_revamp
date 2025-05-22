@@ -29,7 +29,7 @@ class RecommendationEngine:
         conn = self.connect_db()
         cursor = conn.cursor()
 
-        cursor.execute('SELECT * FROM "Product" ORDER BY RANDOM() LIMIT 400;')
+        cursor.execute('SELECT * FROM "Product" ORDER BY RANDOM() LIMIT 800;')
         products = cursor.fetchall()
 
         return [p[0] for p in products]
