@@ -1,18 +1,10 @@
-const { PrismaClient } = require('@prisma/client');
+const { parentPort, workerData } = require('worker_threads');
 const axios = require('axios');
 const cheerio = require('cheerio');
-const fs = require('fs');
-const path = require('path');
-const { URL } = require('url');
 const puppeteer = require('puppeteer');
-const { Worker } = require('worker_threads');
-const os = require('os');
-
-const prisma = new PrismaClient();
+const { URL } = require('url');
 
 const productIdentifiers = require('../utils/product_identifiers.json');
-
-const NUM_WORKERS = Math.max(1, os.cpus().length - 1);
 
 function extractDomain(url) {
     try {
@@ -183,137 +175,80 @@ function extractData($, selectors, url) {
     return data;
 }
 
-async function scrapeProducts() {
-    let writeStream;
-    const BATCH_SIZE = 100;
-    let skip = 0;
-    let hasMoreProducts = true;
-    let totalSuccessCount = 0;
-    let totalFailureCount = 0;
-    let totalProcessed = 0;
-
+async function scrapeProduct(product) {
     try {
-        writeStream = fs.createWriteStream('data.json');
-        writeStream.write('[\n');
-        let isFirstItem = true;
-
-        while (hasMoreProducts) {
-            const products = await prisma.product.findMany({
-                where: {
-                    url: {
-                        not: ''
-                    }
-                },
-                include: {
-                    country: true,
-                    brand: true,
-                    category: true
-                },
-                take: BATCH_SIZE,
-                skip: skip
-            });
-
-            if (products.length === 0) {
-                hasMoreProducts = false;
-                break;
-            }
-
-            const workers = Array.from({ length: NUM_WORKERS }, () => {
-                const worker = new Worker(path.join(__dirname, 'scraperWorker.js'));
-                worker.setMaxListeners(products.length);
-                return worker;
-            });
-
-            const CHUNK_SIZE = Math.ceil(products.length / NUM_WORKERS);
-            const chunks = [];
-            for (let i = 0; i < products.length; i += CHUNK_SIZE) {
-                chunks.push(products.slice(i, i + CHUNK_SIZE));
-            }
-
-            const results = [];
-            for (let i = 0; i < chunks.length; i++) {
-                const chunk = chunks[i];
-                const worker = workers[i % NUM_WORKERS];
-                
-                const chunkResults = await Promise.all(
-                    chunk.map(product => 
-                        new Promise((resolve) => {
-                            const messageHandler = (result) => {
-                                worker.removeListener('message', messageHandler);
-                                resolve(result);
-                            };
-                            worker.on('message', messageHandler);
-                            worker.postMessage(product);
-                        })
-                    )
-                );
-                results.push(...chunkResults);
-            }
-
-            await Promise.all(workers.map(worker => worker.terminate()));
-
-            let successCount = 0;
-            let failureCount = 0;
-
-            for (const result of results) {
-                if (result.success) {
-                    const jsonString = JSON.stringify(result.data, null, 2);
-                    if (!isFirstItem) {
-                        writeStream.write(',\n');
-                    }
-                    writeStream.write(jsonString);
-                    isFirstItem = false;
-
-                    try {
-                        await prisma.product.update({
-                            where: {
-                                id: result.productId
-                            },
-                            data: {
-                                price: {
-                                    set: result.numericPrice
-                                }
-                            }
-                        });
-                        console.log(`Updated price in database for product ${result.productId}: ${result.numericPrice.toFixed(2)}`);
-                        successCount++;
-                    } catch (dbError) {
-                        console.error(`Failed to update price in database for product ${result.productId}:`, dbError);
-                        failureCount++;
-                    }
-                } else {
-                    console.log(`Failed to scrape product: ${result.error}`);
-                    failureCount++;
-                }
-            }
-
-            totalSuccessCount += successCount;
-            totalFailureCount += failureCount;
-            totalProcessed += products.length;
-            skip += BATCH_SIZE;
-
-            console.log(`\nBatch Summary (${skip - BATCH_SIZE + 1} to ${skip}):`);
-            console.log(`Successfully scraped: ${successCount}`);
-            console.log(`Failed to scrape: ${failureCount}`);
+        const domain = extractDomain(product.url);
+        if (!domain || !productIdentifiers[domain]) {
+            return { success: false, error: `No scraping rules found for domain: ${domain}` };
         }
 
-        writeStream.write('\n]');
-        writeStream.end();
+        const rules = productIdentifiers[domain];
+        const html = await getHtmlContent(product.url, rules.loads_with_js);
+        
+        if (!html) {
+            return { success: false, error: `Failed to fetch content for: ${product.url}` };
+        }
 
-        console.log('\nFinal Scraping Summary:');
-        console.log(`Total products processed: ${totalProcessed}`);
-        console.log(`Total successfully scraped: ${totalSuccessCount}`);
-        console.log(`Total failed to scrape: ${totalFailureCount}`);
-        console.log('Data saved to data.json');
+        const $ = cheerio.load(html);
+        
+        if (!$(rules.product_page_validator).length) {
+            return { success: false, error: `Not a valid product page: ${product.url}` };
+        }
+
+        const extractedData = extractData($, rules, product.url);
+
+        const favicon = $('link[rel="icon"], link[rel="shortcut icon"]').attr('href');
+        const websiteLogo = favicon ? new URL(favicon, product.url).href : '';
+
+        const priceData = extractPrice(extractedData.product_price, product.country);
+        const numericPrice = getNumericPrice(priceData.price);
+
+        const formattedData = {
+            site_name: rules.site_name,
+            product_url: product.url,
+            product_id: extractedData.product_id || product.id.toString(),
+            product_name: extractedData.product_name || product.name,
+            product_unique_id: extractedData.product_unique_id || '',
+            product_description: extractedData.product_description || product.description,
+            product_country: {
+                country_id: product.country.id.toString(),
+                country_name: product.country.name,
+                country_code: product.country.code,
+                currency: product.country.currency,
+                currency_symbol: product.country.currencySymbol,
+                mobile_code: product.country.mobileCode
+            },
+            product_price: priceData.price,
+            product_images: extractedData.product_images || product.images || [],
+            product_brand_name: extractedData.product_brand_name || product.brand?.name || '',
+            product_category: extractedData.product_category || product.category?.name || '',
+            product_subcategory: extractedData.product_subcategory || '',
+            website_logo: websiteLogo
+        };
+
+        if (
+            formattedData.product_price !== '' &&
+            numericPrice > 0 &&
+            formattedData.product_name !== '' &&
+            formattedData.product_description !== '' &&
+            formattedData.product_url !== ''
+        ) {
+            return {
+                success: true,
+                data: formattedData,
+                numericPrice,
+                productId: product.id
+            };
+        } else {
+            return { success: false, error: 'Missing required fields' };
+        }
 
     } catch (error) {
-        console.error('Error in scraping process:', error);
-    } finally {
-        if (writeStream) {
-            writeStream.end();
-        }
-        await prisma.$disconnect();
+        return { success: false, error: error.message };
     }
 }
 
-scrapeProducts(); 
+parentPort.on('message', async (product) => {
+    const result = await scrapeProduct(product);
+    parentPort.postMessage(result);
+}); 
