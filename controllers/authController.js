@@ -24,7 +24,7 @@ exports.signupUser = async function ({ firstName, lastName, email, mobile, passw
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "7d" });
+        const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "30d" });
 
         const user = await prisma.user.create({
             data: {

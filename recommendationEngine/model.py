@@ -9,10 +9,11 @@ import psycopg2
 import sys
 import os
 import datetime
+from .config import DB_CONFIG
 
 class RecommendationEngine:
-    def __init__(self, db_config):
-        self.db_config = db_config
+    def __init__(self):
+        self.db_config = DB_CONFIG
         self.categories_df = None
         self.users_df = None
         self.products_df = None
@@ -270,18 +271,10 @@ class RecommendationEngine:
         return recommended_product_ids
 
 
-db_config = {
-    "dbname": "arrival_haul",
-    "user": "postgres",
-    "password": "root",
-    "host": "localhost",
-    "port": "5432"
-}
-
 if __name__ == "__main__":
     user_id = int(sys.argv[1])
     num_recommendations = int(sys.argv[2]) if len(sys.argv) > 2 else None
-    model = RecommendationEngine(db_config)
+    model = RecommendationEngine()
     '''
     model.train()
     print(model.recommend(38))
