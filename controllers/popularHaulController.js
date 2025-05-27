@@ -24,7 +24,7 @@ exports.getPopularHaul = async (req, res) => {
         while (responseProducts.length < MIN_REQUIRED && attempts < MAX_ATTEMPTS) {
             attempts++;
 
-            const batchSize = pageSize * 10;
+            const batchSize = pageSize * 50;
 
             const sourceProducts = await prisma.$queryRaw`
                 SELECT * FROM "Product"
