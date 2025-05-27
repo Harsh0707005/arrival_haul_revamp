@@ -11,64 +11,84 @@ exports.getWishlistProducts = async (req, res) => {
         const pageSize = parseInt(req.query.pageSize) || 10;
         const filter = req.query.filter || 'common';
 
-        const baseQuery = {
+        const wishlistEntries = await prisma.wishlist.findMany({
             where: { userId },
             include: {
                 product: {
-                    include: { brand: true, country: true }
+                    include: { 
+                        brand: true, 
+                        country: true,
+                        category: true
+                    }
                 }
             },
             orderBy: {
                 createdAt: 'desc'
             }
-        };
+        });
 
-        const allWishlistEntries = await prisma.wishlist.findMany(baseQuery);
-
-        let filteredEntries = [];
-        for (const entry of allWishlistEntries) {
+        let resultProducts = [];
+        
+        for (const entry of wishlistEntries) {
             const product = entry.product;
             
-            const counterpartInDest = await prisma.product.findFirst({
+            const destProduct = await prisma.product.findFirst({
                 where: {
                     sku_id: product.sku_id,
                     country_id: destination_country_id
+                },
+                include: {
+                    brand: true,
+                    country: true,
+                    category: true
                 }
             });
-            
-            const counterpartInSource = await prisma.product.findFirst({
+
+            const sourceProduct = await prisma.product.findFirst({
                 where: {
                     sku_id: product.sku_id,
                     country_id: source_country_id
+                },
+                include: {
+                    brand: true,
+                    country: true,
+                    category: true
                 }
             });
 
-            let presence = "others";
-            if (counterpartInDest && counterpartInSource) {
-                presence = "common";
-            } else if (product.country_id === source_country_id) {
-                presence = "source";
-            } else if (product.country_id === destination_country_id) {
-                presence = "destination";
-            }
+            switch (filter) {
+                case 'common':
+                    if (sourceProduct && destProduct) {
+                        resultProducts.push({ sourceProduct, destProduct });
+                    }
+                    break;
 
-            if (filter === 'common' && presence === 'common') {
-                filteredEntries.push(entry);
-            } else if (filter === 'source' && presence === 'source') {
-                filteredEntries.push(entry);
-            } else if (filter === 'destination' && presence === 'destination') {
-                filteredEntries.push(entry);
-            } else if (filter === 'others' && presence === 'others') {
-                filteredEntries.push(entry);
+                case 'source':
+                    if (sourceProduct && !destProduct) {
+                        resultProducts.push({ sourceProduct });
+                    }
+                    break;
+
+                case 'destination':
+                    if (!sourceProduct && destProduct) {
+                        resultProducts.push({ destProduct });
+                    }
+                    break;
+
+                case 'others':
+                    if (!sourceProduct && !destProduct) {
+                        resultProducts.push({ product });
+                    }
+                    break;
             }
         }
 
-        const totalItems = filteredEntries.length;
+        const totalItems = resultProducts.length;
         const totalPages = Math.ceil(totalItems / pageSize);
         const startIndex = (page - 1) * pageSize;
-        const paginatedEntries = filteredEntries.slice(startIndex, startIndex + pageSize);
+        const paginatedProducts = resultProducts.slice(startIndex, startIndex + pageSize);
 
-        if (!paginatedEntries.length) {
+        if (!paginatedProducts.length) {
             return res.json({
                 success: true,
                 currentPage: page,
@@ -80,105 +100,101 @@ exports.getWishlistProducts = async (req, res) => {
         }
 
         const wishlistProducts = await Promise.all(
-            paginatedEntries.map(async ({ product }) => {
-                const counterpartInDest = await prisma.product.findFirst({
-                    where: {
-                        sku_id: product.sku_id,
-                        country_id: destination_country_id
-                    }
-                });
-                
-                const counterpartInSource = await prisma.product.findFirst({
-                    where: {
-                        sku_id: product.sku_id,
-                        country_id: source_country_id
-                    }
-                });
+            paginatedProducts.map(async (entry) => {
+                const { sourceProduct, destProduct, product } = entry;
+                let presence;
+                let sourceBlock = {
+                    original: null,
+                    converted: null,
+                    price_difference_percentage: null,
+                    currency: null
+                };
+                let destBlock = {
+                    original: null,
+                    converted: null,
+                    price_difference_percentage: null,
+                    currency: null
+                };
 
-                let presence = "others";
-                if (counterpartInDest && counterpartInSource) {
-                    presence = "common";
-                } else if (product.country_id === source_country_id) {
-                    presence = "source";
-                } else if (product.country_id === destination_country_id) {
-                    presence = "destination";
-                }
-
-                let sourceBlock = {};
-                let destBlock = {};
-
-                if (presence === "common") {
-                    const fromSource = product.country_id === source_country_id ? product : counterpartInSource;
-                    const fromDest = product.country_id === destination_country_id ? product : counterpartInDest;
-
+                if (filter === 'common') {
+                    presence = 'common';
                     const diff = await calculatePriceDifference(
                         source_country_id,
                         destination_country_id,
-                        fromSource.price,
-                        fromDest.price
+                        sourceProduct.price,
+                        destProduct.price
                     );
+
                     const swap = await calculatePriceDifference(
                         destination_country_id,
                         source_country_id,
-                        fromDest.price,
-                        fromSource.price
+                        destProduct.price,
+                        sourceProduct.price
                     );
 
                     sourceBlock = {
-                        original: diff.sourcePriceOriginal,
+                        original: sourceProduct.price,
                         converted: diff.destinationPriceConverted,
                         price_difference_percentage: diff.percentageDifference,
-                        currency: diff.sourceCurrency
+                        currency: sourceProduct.country.currencySymbol
                     };
+
                     destBlock = {
-                        original: diff.destinationPriceOriginal,
+                        original: destProduct.price,
                         converted: diff.sourcePriceConverted,
                         price_difference_percentage: swap.percentageDifference,
-                        currency: diff.destinationCurrency
+                        currency: destProduct.country.currencySymbol
                     };
-                } else if (presence === "source") {
+                } else if (filter === 'source') {
+                    presence = 'source';
                     sourceBlock = {
-                        original: product.price,
+                        original: sourceProduct.price,
                         converted: null,
                         price_difference_percentage: null,
-                        currency: product.country.currencySymbol
+                        currency: sourceProduct.country.currencySymbol
                     };
-                } else if (presence === "destination") {
+                } else if (filter === 'destination') {
+                    presence = 'destination';
                     destBlock = {
-                        original: product.price,
+                        original: destProduct.price,
                         converted: null,
                         price_difference_percentage: null,
-                        currency: product.country.currencySymbol
+                        currency: destProduct.country.currencySymbol
                     };
                 } else {
-                    sourceBlock = {
-                        original: null,
-                        converted: null,
-                        price_difference_percentage: null,
-                        currency: null
-                    };
-                    destBlock = {
-                        original: product.price,
-                        converted: null,
-                        price_difference_percentage: null,
-                        currency: product.country.currencySymbol
-                    };
+                    presence = 'others';
+                    if (product.country_id === source_country_id) {
+                        sourceBlock = {
+                            original: product.price,
+                            converted: null,
+                            price_difference_percentage: null,
+                            currency: product.country.currencySymbol
+                        };
+                    } else if (product.country_id === destination_country_id) {
+                        destBlock = {
+                            original: product.price,
+                            converted: null,
+                            price_difference_percentage: null,
+                            currency: product.country.currencySymbol
+                        };
+                    }
                 }
 
+                const baseProduct = sourceProduct || destProduct || product;
                 return {
-                    product_id: product.id,
-                    sku_id: product.sku_id,
-                    product_name: product.name,
-                    product_description: product.description,
+                    product_id: baseProduct.id,
+                    sku_id: baseProduct.sku_id,
+                    product_name: baseProduct.name,
+                    product_description: baseProduct.description,
                     brand: {
-                        brand_id: product.brand?.id || null,
-                        brand_name: product.brand?.name || null
+                        brand_id: baseProduct.brand?.id || null,
+                        brand_name: baseProduct.brand?.name || null
                     },
                     category: {
-                        category_id: product.category?.id || null,
-                        category_name: product.category?.name || null
+                        category_id: baseProduct.category?.id || null,
+                        category_name: baseProduct.category?.name || null
                     },
-                    images: product.images?.length ? [product.images[0]] : [],
+                    images: baseProduct.images?.length ? [baseProduct.images[0]] : [],
                     presence,
                     is_favourite: true,
                     source_country_details: sourceBlock,
@@ -195,6 +211,7 @@ exports.getWishlistProducts = async (req, res) => {
             totalItems,
             wishlist_products: wishlistProducts
         });
+
     } catch (error) {
         console.error("Error fetching wishlist products:", error);
         return res.status(500).json({
