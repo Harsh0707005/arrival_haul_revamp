@@ -28,22 +28,28 @@ exports.getWishlistProducts = async (req, res) => {
         let filteredEntries = [];
         for (const entry of allWishlistEntries) {
             const product = entry.product;
-            const counterpart = await prisma.product.findFirst({
+            
+            const counterpartInDest = await prisma.product.findFirst({
                 where: {
                     sku_id: product.sku_id,
-                    country_id: product.country_id === source_country_id ? destination_country_id : source_country_id
+                    country_id: destination_country_id
+                }
+            });
+            
+            const counterpartInSource = await prisma.product.findFirst({
+                where: {
+                    sku_id: product.sku_id,
+                    country_id: source_country_id
                 }
             });
 
-            let presence = "common";
-            if (!counterpart) {
-                if (product.country_id === source_country_id) {
-                    presence = "source";
-                } else if (product.country_id === destination_country_id) {
-                    presence = "destination";
-                } else {
-                    presence = "others";
-                }
+            let presence = "others";
+            if (counterpartInDest && counterpartInSource) {
+                presence = "common";
+            } else if (product.country_id === source_country_id) {
+                presence = "source";
+            } else if (product.country_id === destination_country_id) {
+                presence = "destination";
             }
 
             if (filter === 'common' && presence === 'common') {
@@ -75,42 +81,35 @@ exports.getWishlistProducts = async (req, res) => {
 
         const wishlistProducts = await Promise.all(
             paginatedEntries.map(async ({ product }) => {
-                const counterpart =
-                    product.country_id === source_country_id
-                        ? await prisma.product.findFirst({
-                            where: {
-                                sku_id: product.sku_id,
-                                country_id: destination_country_id
-                            }
-                        })
-                        : await prisma.product.findFirst({
-                            where: {
-                                sku_id: product.sku_id,
-                                country_id: source_country_id
-                            }
-                        });
-
-                let presence = "common";
-                if (!counterpart) {
-                    if (product.country_id === source_country_id) {
-                        presence = "source";
-                    } else if (product.country_id === destination_country_id) {
-                        presence = "destination";
-                    } else {
-                        presence = "others";
+                const counterpartInDest = await prisma.product.findFirst({
+                    where: {
+                        sku_id: product.sku_id,
+                        country_id: destination_country_id
                     }
+                });
+                
+                const counterpartInSource = await prisma.product.findFirst({
+                    where: {
+                        sku_id: product.sku_id,
+                        country_id: source_country_id
+                    }
+                });
+
+                let presence = "others";
+                if (counterpartInDest && counterpartInSource) {
+                    presence = "common";
+                } else if (product.country_id === source_country_id) {
+                    presence = "source";
+                } else if (product.country_id === destination_country_id) {
+                    presence = "destination";
                 }
 
                 let sourceBlock = {};
                 let destBlock = {};
 
                 if (presence === "common") {
-                    const fromSource =
-                        product.country_id === source_country_id ? product : counterpart;
-                    const fromDest =
-                        product.country_id === destination_country_id
-                            ? product
-                            : counterpart;
+                    const fromSource = product.country_id === source_country_id ? product : counterpartInSource;
+                    const fromDest = product.country_id === destination_country_id ? product : counterpartInDest;
 
                     const diff = await calculatePriceDifference(
                         source_country_id,
