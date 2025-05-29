@@ -283,6 +283,16 @@ async function scrapeProducts() {
                     }
                 } else {
                     console.log(`Failed to scrape product: ${result.error}`);
+                    try {
+                        await prisma.product.delete({
+                            where: {
+                                id: result.productId
+                            }
+                        });
+                        console.log(`Deleted product ${result.productId} due to failed scraping`);
+                    } catch (deleteError) {
+                        console.error(`Failed to delete product ${result.productId}:`, deleteError);
+                    }
                     failureCount++;
                 }
             }
