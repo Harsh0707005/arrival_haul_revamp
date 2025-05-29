@@ -240,7 +240,7 @@ async function scrapeProducts() {
                         new Promise((resolve) => {
                             const messageHandler = (result) => {
                                 worker.removeListener('message', messageHandler);
-                                resolve(result);
+                                resolve({ ...result, originalProduct: product });
                             };
                             worker.on('message', messageHandler);
                             worker.postMessage(product);
@@ -267,7 +267,7 @@ async function scrapeProducts() {
                     try {
                         await prisma.product.update({
                             where: {
-                                id: result.productId
+                                id: result.originalProduct.id
                             },
                             data: {
                                 price: {
@@ -275,27 +275,23 @@ async function scrapeProducts() {
                                 }
                             }
                         });
-                        console.log(`Updated price in database for product ${result.productId}: ${result.numericPrice.toFixed(2)}`);
+                        console.log(`Updated price in database for product ${result.originalProduct.id}: ${result.numericPrice.toFixed(2)}`);
                         successCount++;
                     } catch (dbError) {
-                        console.error(`Failed to update price in database for product ${result.productId}:`, dbError);
+                        console.error(`Failed to update price in database for product ${result.originalProduct.id}:`, dbError);
                         failureCount++;
                     }
                 } else {
                     console.log(`Failed to scrape product: ${result.error}`);
-                    if (result.productId) {
-                        try {
-                            await prisma.product.delete({
-                                where: {
-                                    id: result.productId
-                                }
-                            });
-                            console.log(`Deleted product ${result.productId} due to failed scraping`);
-                        } catch (deleteError) {
-                            console.error(`Failed to delete product ${result.productId}:`, deleteError);
-                        }
-                    } else {
-                        console.error('Cannot delete product: Missing product ID in result');
+                    try {
+                        await prisma.product.delete({
+                            where: {
+                                id: result.originalProduct.id
+                            }
+                        });
+                        console.log(`Deleted product ${result.originalProduct.id} due to failed scraping`);
+                    } catch (deleteError) {
+                        console.error(`Failed to delete product ${result.originalProduct.id}:`, deleteError);
                     }
                     failureCount++;
                 }
