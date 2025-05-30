@@ -256,7 +256,7 @@ async function scrapeProducts() {
             let failureCount = 0;
 
             for (const result of results) {
-                if (result.success) {
+                if (result.success && result.numericPrice > 0) {
                     const jsonString = JSON.stringify(result.data, null, 2);
                     if (!isFirstItem) {
                         writeStream.write(',\n');
@@ -279,10 +279,21 @@ async function scrapeProducts() {
                         successCount++;
                     } catch (dbError) {
                         console.error(`Failed to update price in database for product ${result.originalProduct.id}:`, dbError);
-                        failureCount++;
+                        // Delete product if price update fails
+                        try {
+                            await prisma.product.delete({
+                                where: {
+                                    id: result.originalProduct.id
+                                }
+                            });
+                            console.log(`Deleted product ${result.originalProduct.id} due to failed price update`);
+                            failureCount++;
+                        } catch (deleteError) {
+                            console.error(`Failed to delete product ${result.originalProduct.id}:`, deleteError);
+                        }
                     }
                 } else {
-                    console.log(`Failed to scrape product: ${result.error}`);
+                    console.log(`Failed to scrape product ${result.originalProduct.id}: ${result.error || 'No price found or invalid data'}`);
                     try {
                         await prisma.product.delete({
                             where: {
