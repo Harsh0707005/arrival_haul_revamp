@@ -34,13 +34,18 @@ async function getHtmlContent(url, loadsWithJs, retries = 3) {
                 });
                 const page = await browser.newPage();
                 await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-                await page.goto(url, { 
-                    waitUntil: 'networkidle0',
-                    timeout: 30000 
-                });
-                const content = await page.content();
-                await browser.close();
-                return content;
+                try {
+                    await page.goto(url, { 
+                        waitUntil: 'networkidle0',
+                        timeout: 30000 
+                    });
+                    const content = await page.content();
+                    await browser.close();
+                    return content;
+                } catch (pageError) {
+                    await browser.close();
+                    throw pageError;
+                }
             } else {
                 const response = await axios.get(url, {
                     headers: {
@@ -55,16 +60,42 @@ async function getHtmlContent(url, loadsWithJs, retries = 3) {
                     }
                 });
 
+                // Handle specific HTTP status codes
+                if (response.status === 403) {
+                    console.log(`Access forbidden (403): ${url} - Website blocking access`);
+                    return null;
+                }
                 if (response.status === 404) {
                     console.log(`Product not found (404): ${url}`);
                     return null;
                 }
-
+                if (response.status === 429) {
+                    console.log(`Rate limited (429): ${url} - Too many requests`);
+                    return null;
+                }
+                if (response.status === 500) {
+                    console.log(`Server error (500): ${url} - Website server error`);
+                    return null;
+                }
                 if (response.status !== 200) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    console.log(`HTTP error ${response.status}: ${url}`);
+                    return null;
                 }
 
-                return response.data;
+                // Check for common blocking indicators in response
+                const content = response.data;
+                if (typeof content === 'string' && (
+                    content.includes('Access Denied') ||
+                    content.includes('Blocked') ||
+                    content.includes('Security Check') ||
+                    content.includes('Captcha') ||
+                    content.includes('Robot Check')
+                )) {
+                    console.log(`Website blocking detected: ${url}`);
+                    return null;
+                }
+
+                return content;
             }
         } catch (error) {
             console.error(`Attempt ${attempt} failed for ${url}:`, error.message);
@@ -72,7 +103,9 @@ async function getHtmlContent(url, loadsWithJs, retries = 3) {
                 console.error(`All retry attempts failed for ${url}`);
                 return null;
             }
-            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+            // Exponential backoff with jitter
+            const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+            await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
     return null;
@@ -256,7 +289,8 @@ async function scrapeProducts() {
             let failureCount = 0;
 
             for (const result of results) {
-                if (result.success && result.numericPrice > 0) {
+                // Check if scraping was successful and price is valid
+                if (result.success && result.numericPrice > 0 && result.data.product_price) {
                     const jsonString = JSON.stringify(result.data, null, 2);
                     if (!isFirstItem) {
                         writeStream.write(',\n');
@@ -280,30 +314,16 @@ async function scrapeProducts() {
                     } catch (dbError) {
                         console.error(`Failed to update price in database for product ${result.originalProduct.id}:`, dbError);
                         // Delete product if price update fails
-                        try {
-                            await prisma.product.delete({
-                                where: {
-                                    id: result.originalProduct.id
-                                }
-                            });
-                            console.log(`Deleted product ${result.originalProduct.id} due to failed price update`);
-                            failureCount++;
-                        } catch (deleteError) {
-                            console.error(`Failed to delete product ${result.originalProduct.id}:`, deleteError);
-                        }
+                        await deleteProduct(result.originalProduct.id, 'Failed to update price in database');
+                        failureCount++;
                     }
                 } else {
-                    console.log(`Failed to scrape product ${result.originalProduct.id}: ${result.error || 'No price found or invalid data'}`);
-                    try {
-                        await prisma.product.delete({
-                            where: {
-                                id: result.originalProduct.id
-                            }
-                        });
-                        console.log(`Deleted product ${result.originalProduct.id} due to failed scraping`);
-                    } catch (deleteError) {
-                        console.error(`Failed to delete product ${result.originalProduct.id}:`, deleteError);
-                    }
+                    // Delete product if scraping failed or price is invalid
+                    const errorReason = result.error || 
+                        (!result.data.product_price ? 'No price found' : 
+                        (result.numericPrice <= 0 ? 'Invalid price value' : 'Scraping failed'));
+                    
+                    await deleteProduct(result.originalProduct.id, errorReason);
                     failureCount++;
                 }
             }
@@ -334,6 +354,20 @@ async function scrapeProducts() {
             writeStream.end();
         }
         await prisma.$disconnect();
+    }
+}
+
+// Helper function to delete products
+async function deleteProduct(productId, reason) {
+    try {
+        await prisma.product.delete({
+            where: {
+                id: productId
+            }
+        });
+        console.log(`Deleted product ${productId} - Reason: ${reason}`);
+    } catch (deleteError) {
+        console.error(`Failed to delete product ${productId}:`, deleteError);
     }
 }
 
