@@ -358,4 +358,4 @@ if __name__ == "__main__":
         engine.save_model("model.pkl")
     
     recommendations = engine.recommend(user_id, n)
-    (recommendations)
+    print(recommendations)
