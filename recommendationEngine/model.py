@@ -272,15 +272,15 @@ class RecommendationEngine:
         return suggested_categories
 
     def train(self):
-        print("Loading data...")
+        # print("Loading data...")
         self.loadData()
-        print("Building user-item matrix...")
+        # print("Building user-item matrix...")
         self.build_user_item_matrix()
-        print("Building product similarity matrix...")
+        # print("Building product similarity matrix...")
         self.build_product_similarity_matrix()
-        print("Building user similarity matrix...")
+        # print("Building user similarity matrix...")
         self.similarity_matrix = cosine_similarity(self.user_item_matrix)
-        print("Training completed!")
+        # print("Training completed!")
 
     def get_product_details(self, product_ids):
         products = [
@@ -329,7 +329,7 @@ class RecommendationEngine:
 
             return True
         except Exception as e:
-            print(f"Error loading model: {e}")
+            # print(f"Error loading model: {e}")
             return False
 
     def recommend(self, user_id, n=20):
@@ -338,7 +338,7 @@ class RecommendationEngine:
             # Convert numpy integers to plain Python integers
             return [int(x) for x in recommended_product_ids]
         except Exception as e:
-            print(f"Error in recommendation: {e}")
+            # print(f"Error in recommendation: {e}")
             return []
 
 if __name__ == "__main__":
@@ -353,9 +353,9 @@ if __name__ == "__main__":
     
     # Try to load existing model
     if not engine.load_model("model.pkl"):
-        print("Training new model...")
+        # print("Training new model...")
         engine.train()
         engine.save_model("model.pkl")
     
     recommendations = engine.recommend(user_id, n)
-    print(recommendations)
+    (recommendations)
