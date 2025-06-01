@@ -22,7 +22,6 @@ class RecommendationEngine:
         self.user_item_matrix = None
         self.similarity_matrix = None
         self.product_similarity_matrix = None
-        self.price_differences = None
 
     def connect_db(self):
         return psycopg2.connect(**self.db_config)
@@ -72,11 +71,6 @@ class RecommendationEngine:
         cursor.execute("SELECT * FROM \"Wishlist\";")
         wishlists = cursor.fetchall()
         self.wishlist_df = pd.DataFrame(wishlists, columns=[desc[0] for desc in cursor.description])
-        
-        # Load exchange rates for price difference calculations
-        cursor.execute("SELECT * FROM \"ExchangeRate\";")
-        exchange_rates = cursor.fetchall()
-        self.exchange_rates_df = pd.DataFrame(exchange_rates, columns=[desc[0] for desc in cursor.description])
         
         cursor.close()
         conn.close()
@@ -128,14 +122,12 @@ class RecommendationEngine:
         for _, product in self.products_df.iterrows():
             features = {
                 'category_id': product['category_id'],
-                'brand_id': product['brand_id'],
-                'price': product['price']
+                'brand_id': product['brand_id']
             }
             product_features.append(features)
         
-        # Convert to DataFrame and normalize
+        # Convert to DataFrame
         features_df = pd.DataFrame(product_features)
-        features_df['price'] = (features_df['price'] - features_df['price'].mean()) / features_df['price'].std()
         
         # Create one-hot encoding for categorical features
         category_dummies = pd.get_dummies(features_df['category_id'], prefix='category')
@@ -144,32 +136,11 @@ class RecommendationEngine:
         # Combine all features
         features_matrix = pd.concat([
             category_dummies,
-            brand_dummies,
-            features_df['price']
+            brand_dummies
         ], axis=1)
         
         # Calculate cosine similarity
         self.product_similarity_matrix = cosine_similarity(features_matrix)
-
-    def calculate_price_differences(self):
-        self.price_differences = defaultdict(dict)
-        
-        for _, rate in self.exchange_rates_df.iterrows():
-            from_id = rate['fromId']
-            to_id = rate['toId']
-            exchange_rate = rate['rate']
-            
-            # Get products from both countries
-            from_products = self.products_df[self.products_df['country_id'] == from_id]
-            to_products = self.products_df[self.products_df['country_id'] == to_id]
-            
-            # Calculate price differences for matching SKUs
-            for _, from_product in from_products.iterrows():
-                matching_products = to_products[to_products['sku_id'] == from_product['sku_id']]
-                if not matching_products.empty:
-                    to_product = matching_products.iloc[0]
-                    price_diff = ((to_product['price'] * exchange_rate) - from_product['price']) / from_product['price'] * 100
-                    self.price_differences[from_product['id']][to_product['id']] = price_diff
 
     def get_similar_users(self, user_id, n=10):
         if user_id not in self.user_to_index:
@@ -239,35 +210,18 @@ class RecommendationEngine:
         
         return recommendations[:n]
 
-    def get_price_based_recommendations(self, user_id, n=10):
-        user = self.users_df[self.users_df['id'] == user_id].iloc[0]
-        source_country_id = user['source_country_id']
-        dest_country_id = user['destination_country_id']
-        
-        # Get products with significant price differences
-        price_recommendations = []
-        for product_id, price_diffs in self.price_differences.items():
-            if dest_country_id in price_diffs:
-                price_diff = price_diffs[dest_country_id]
-                if abs(price_diff) > 20:  # Only consider significant price differences
-                    price_recommendations.append((product_id, abs(price_diff)))
-        
-        return sorted(price_recommendations, key=lambda x: x[1], reverse=True)[:n]
-
     def build_hybrid_recommendations(self, user_id, n=20):
         # Get recommendations from different sources
         collaborative_recs = self.get_collaborative_recommendations(user_id, n)
         content_recs = self.get_content_based_recommendations(user_id, n)
-        price_recs = self.get_price_based_recommendations(user_id, n)
         
         # Combine and score recommendations
         recommendation_scores = defaultdict(float)
         
         # Weight for different recommendation sources
         weights = {
-            'collaborative': 0.4,
-            'content': 0.3,
-            'price': 0.3
+            'collaborative': 0.6,  # Increased weight for collaborative filtering
+            'content': 0.4        # Increased weight for content-based filtering
         }
         
         # Add collaborative recommendations
@@ -277,10 +231,6 @@ class RecommendationEngine:
         # Add content-based recommendations
         for product_id in content_recs:
             recommendation_scores[product_id] += weights['content']
-        
-        # Add price-based recommendations
-        for product_id, price_diff in price_recs:
-            recommendation_scores[product_id] += weights['price'] * (price_diff / 100)
         
         # Sort and return top recommendations
         sorted_recommendations = sorted(
@@ -328,8 +278,6 @@ class RecommendationEngine:
         self.build_user_item_matrix()
         print("Building product similarity matrix...")
         self.build_product_similarity_matrix()
-        print("Calculating price differences...")
-        self.calculate_price_differences()
         print("Building user similarity matrix...")
         self.similarity_matrix = cosine_similarity(self.user_item_matrix)
         print("Training completed!")
@@ -352,7 +300,6 @@ class RecommendationEngine:
             "user_item_matrix": self.user_item_matrix,
             "similarity_matrix": self.similarity_matrix,
             "product_similarity_matrix": self.product_similarity_matrix,
-            "price_differences": dict(self.price_differences),
             "user_to_index": self.user_to_index,
             "index_to_user": self.index_to_user,
             "product_to_index": self.product_to_index,
@@ -375,7 +322,6 @@ class RecommendationEngine:
             self.user_item_matrix = model_data["user_item_matrix"]
             self.similarity_matrix = model_data["similarity_matrix"]
             self.product_similarity_matrix = model_data["product_similarity_matrix"]
-            self.price_differences = defaultdict(dict, model_data["price_differences"])
             self.user_to_index = model_data["user_to_index"]
             self.index_to_user = model_data["index_to_user"]
             self.product_to_index = model_data["product_to_index"]
