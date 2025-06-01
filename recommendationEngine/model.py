@@ -181,21 +181,12 @@ class RecommendationEngine:
 
         return sorted(recommendations, key=lambda x: x[1], reverse=True)[:n]
 
-    def get_wishlist_categories(self, user_id):
-        """Get categories of products in user's wishlist"""
-        user_wishlist = self.wishlist_df[self.wishlist_df['userId'] == user_id]['productId'].tolist()
-        wishlist_products = self.products_df[self.products_df['id'].isin(user_wishlist)]
-        return set(wishlist_products['category_id'].unique())
-
     def get_content_based_recommendations(self, user_id, n=10):
         if user_id not in self.user_to_index:
             return []
 
         user_index = self.user_to_index[user_id]
         user_interests = self.user_interests_df[self.user_interests_df['user_id'] == user_id]['category_id'].tolist()
-        
-        # Get wishlist categories
-        wishlist_categories = self.get_wishlist_categories(user_id)
         
         # Get products from user's interested categories
         category_products = self.products_df[self.products_df['category_id'].isin(user_interests)]
@@ -217,25 +208,7 @@ class RecommendationEngine:
         # Remove products already in wishlist
         recommendations = [p for p in recommendations if p not in user_wishlist]
         
-        # Score recommendations based on category match
-        scored_recommendations = []
-        for product_id in recommendations:
-            product = self.products_df[self.products_df['id'] == product_id].iloc[0]
-            score = 1.0  # Base score
-            
-            # Higher score for products from wishlist categories
-            if product['category_id'] in wishlist_categories:
-                score *= 2.0
-            
-            # Higher score for products from user's interested categories
-            if product['category_id'] in user_interests:
-                score *= 1.5
-                
-            scored_recommendations.append((product_id, score))
-        
-        # Sort by score and return top n
-        scored_recommendations.sort(key=lambda x: x[1], reverse=True)
-        return [product_id for product_id, _ in scored_recommendations[:n]]
+        return recommendations[:n]
 
     def build_hybrid_recommendations(self, user_id, n=20):
         # Get recommendations from different sources
@@ -247,24 +220,17 @@ class RecommendationEngine:
         
         # Weight for different recommendation sources
         weights = {
-            'collaborative': 0.4,  # Reduced weight for collaborative filtering
-            'content': 0.6        # Increased weight for content-based filtering
+            'collaborative': 0.6,  # Increased weight for collaborative filtering
+            'content': 0.4        # Increased weight for content-based filtering
         }
         
         # Add collaborative recommendations
         for product_id, similarity in collaborative_recs:
             recommendation_scores[product_id] += weights['collaborative'] * similarity
         
-        # Add content-based recommendations with their scores
+        # Add content-based recommendations
         for product_id in content_recs:
-            product = self.products_df[self.products_df['id'] == product_id].iloc[0]
-            score = weights['content']
-            
-            # Additional boost for products from wishlist categories
-            if product['category_id'] in self.get_wishlist_categories(user_id):
-                score *= 1.5
-                
-            recommendation_scores[product_id] += score
+            recommendation_scores[product_id] += weights['content']
         
         # Sort and return top recommendations
         sorted_recommendations = sorted(
