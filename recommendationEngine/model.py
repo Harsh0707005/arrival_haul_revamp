@@ -21,6 +21,8 @@ class RecommendationEngine:
         self.wishlist_df = None
         self.user_item_matrix = None
         self.similarity_matrix = None
+        self.product_similarity_matrix = None
+        self.price_differences = None
 
     def connect_db(self):
         return psycopg2.connect(**self.db_config)
@@ -38,32 +40,50 @@ class RecommendationEngine:
         conn = self.connect_db()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT * FROM users;")
+        # Load users
+        cursor.execute("SELECT * FROM \"User\";")
         users = cursor.fetchall()
         self.users_df = pd.DataFrame(users, columns=[desc[0] for desc in cursor.description])
         
-        cursor.execute("SELECT * FROM categories;")
+        # Load categories
+        cursor.execute("SELECT * FROM \"Category\";")
         categories = cursor.fetchall()
         self.categories_df = pd.DataFrame(categories, columns=[desc[0] for desc in cursor.description])
         
-        cursor.execute("SELECT * FROM products;")
+        # Load products with their categories and brands
+        cursor.execute("""
+            SELECT p.*, c.name as category_name, b.name as brand_name 
+            FROM "Product" p
+            JOIN "Category" c ON p.category_id = c.id
+            JOIN "Brand" b ON p.brand_id = b.id;
+        """)
         products = cursor.fetchall()
         self.products_df = pd.DataFrame(products, columns=[desc[0] for desc in cursor.description])
         
-        cursor.execute("SELECT * FROM user_intrested_category;")
+        # Load user interested categories
+        cursor.execute("""
+            SELECT "A" as user_id, "B" as category_id 
+            FROM "_UserInterestedCategories";
+        """)
         user_interests = cursor.fetchall()
         self.user_interests_df = pd.DataFrame(user_interests, columns=[desc[0] for desc in cursor.description])
         
-        cursor.execute("SELECT * FROM wishlist;")
+        # Load wishlists
+        cursor.execute("SELECT * FROM \"Wishlist\";")
         wishlists = cursor.fetchall()
         self.wishlist_df = pd.DataFrame(wishlists, columns=[desc[0] for desc in cursor.description])
+        
+        # Load exchange rates for price difference calculations
+        cursor.execute("SELECT * FROM \"ExchangeRate\";")
+        exchange_rates = cursor.fetchall()
+        self.exchange_rates_df = pd.DataFrame(exchange_rates, columns=[desc[0] for desc in cursor.description])
         
         cursor.close()
         conn.close()
     
     def build_user_item_matrix(self):
         users = self.users_df["id"].unique()
-        products = self.products_df["product_id"].unique()
+        products = self.products_df["id"].unique()
 
         self.user_to_index = {user: i for i, user in enumerate(users)}
         self.index_to_user = {i: user for user, i in self.user_to_index.items()}
@@ -74,45 +94,82 @@ class RecommendationEngine:
         cols = []
         data = []
 
+        # Add wishlist interactions
         for _, row in self.wishlist_df.iterrows():
-            user_id = row["user_id"]
-            product_id = row["product_id"]
+            user_id = row["userId"]
+            product_id = row["productId"]
 
             if user_id in self.user_to_index and product_id in self.product_to_index:
                 rows.append(self.user_to_index[user_id])
                 cols.append(self.product_to_index[product_id])
-                data.append(1)
+                data.append(1.0)  # Higher weight for wishlist items
+
+        # Add category interest interactions
+        for _, row in self.user_interests_df.iterrows():
+            user_id = row["user_id"]
+            category_id = row["category_id"]
+            
+            # Get all products in this category
+            category_products = self.products_df[self.products_df["category_id"] == category_id]["id"]
+            
+            for product_id in category_products:
+                if user_id in self.user_to_index and product_id in self.product_to_index:
+                    rows.append(self.user_to_index[user_id])
+                    cols.append(self.product_to_index[product_id])
+                    data.append(0.5)  # Lower weight for category interests
 
         self.user_item_matrix = sparse.csr_matrix(
             (data, (rows, cols)), shape=(len(users), len(products))
         )
 
-    def build_category_based_recommendation(self):
-        self.category_recommendations = defaultdict(list)
+    def build_product_similarity_matrix(self):
+        # Create product features matrix
+        product_features = []
+        for _, product in self.products_df.iterrows():
+            features = {
+                'category_id': product['category_id'],
+                'brand_id': product['brand_id'],
+                'price': product['price']
+            }
+            product_features.append(features)
+        
+        # Convert to DataFrame and normalize
+        features_df = pd.DataFrame(product_features)
+        features_df['price'] = (features_df['price'] - features_df['price'].mean()) / features_df['price'].std()
+        
+        # Create one-hot encoding for categorical features
+        category_dummies = pd.get_dummies(features_df['category_id'], prefix='category')
+        brand_dummies = pd.get_dummies(features_df['brand_id'], prefix='brand')
+        
+        # Combine all features
+        features_matrix = pd.concat([
+            category_dummies,
+            brand_dummies,
+            features_df['price']
+        ], axis=1)
+        
+        # Calculate cosine similarity
+        self.product_similarity_matrix = cosine_similarity(features_matrix)
 
-        for _, row in self.user_interests_df.iterrows():
-            user_id = row["user_id"]
-            category_id = row["category_id"]
-
-            category_products = self.products_df[
-                self.products_df["category_id"] == category_id
-            ]["product_id"].tolist()
-
-            self.category_recommendations[user_id].extend(category_products)
-
-        for user_id in self.category_recommendations:
-            user_wishlist = self.wishlist_df[
-                self.wishlist_df["user_id"] == user_id
-            ]["product_id"].tolist()
-
-            self.category_recommendations[user_id] = [
-                product
-                for product in self.category_recommendations[user_id]
-                if product not in user_wishlist
-            ]
-
-    def build_collaborative_filter(self):
-        self.similarity_matrix = cosine_similarity(self.user_item_matrix)
+    def calculate_price_differences(self):
+        self.price_differences = defaultdict(dict)
+        
+        for _, rate in self.exchange_rates_df.iterrows():
+            from_id = rate['fromId']
+            to_id = rate['toId']
+            exchange_rate = rate['rate']
+            
+            # Get products from both countries
+            from_products = self.products_df[self.products_df['country_id'] == from_id]
+            to_products = self.products_df[self.products_df['country_id'] == to_id]
+            
+            # Calculate price differences for matching SKUs
+            for _, from_product in from_products.iterrows():
+                matching_products = to_products[to_products['sku_id'] == from_product['sku_id']]
+                if not matching_products.empty:
+                    to_product = matching_products.iloc[0]
+                    price_diff = ((to_product['price'] * exchange_rate) - from_product['price']) / from_product['price'] * 100
+                    self.price_differences[from_product['id']][to_product['id']] = price_diff
 
     def get_similar_users(self, user_id, n=10):
         if user_id not in self.user_to_index:
@@ -132,48 +189,107 @@ class RecommendationEngine:
 
     def get_collaborative_recommendations(self, user_id, n=10):
         similar_users = self.get_similar_users(user_id)
-
+        
         recommendations = []
         user_wishlist = self.wishlist_df[
-            self.wishlist_df["user_id"] == user_id
-        ]["product_id"].tolist()
+            self.wishlist_df["userId"] == user_id
+        ]["productId"].tolist()
 
         for similar_user_id, similarity in similar_users:
             similar_user_wishlist = self.wishlist_df[
-                self.wishlist_df["user_id"] == similar_user_id
-            ]["product_id"].tolist()
+                self.wishlist_df["userId"] == similar_user_id
+            ]["productId"].tolist()
 
             for product_id in similar_user_wishlist:
                 if product_id not in user_wishlist and product_id not in recommendations:
-                    recommendations.append(product_id)
-                if len(recommendations) >= n:
+                    recommendations.append((product_id, similarity))
+                if len(recommendations) >= n * 2:
                     break
-            if len(recommendations) >= n:
+            if len(recommendations) >= n * 2:
                 break
 
-        return recommendations
+        return sorted(recommendations, key=lambda x: x[1], reverse=True)[:n]
 
-    def build_hybrid_recommendations(self, user_id, n=10, collaborative_weight=0.7, category_weight=0.3):
-        collaborative_recommendations = self.get_collaborative_recommendations(user_id, n * 2)
+    def get_content_based_recommendations(self, user_id, n=10):
+        if user_id not in self.user_to_index:
+            return []
 
-        if user_id in self.category_recommendations:
-            category_recommendations = self.category_recommendations[user_id][:n * 2]
-        else:
-            category_recommendations = []
+        user_index = self.user_to_index[user_id]
+        user_interests = self.user_interests_df[self.user_interests_df['user_id'] == user_id]['category_id'].tolist()
+        
+        # Get products from user's interested categories
+        category_products = self.products_df[self.products_df['category_id'].isin(user_interests)]
+        
+        # Get user's wishlist products
+        user_wishlist = self.wishlist_df[self.wishlist_df['userId'] == user_id]['productId'].tolist()
+        
+        # Get similar products to wishlist items
+        similar_products = []
+        for product_id in user_wishlist:
+            if product_id in self.product_to_index:
+                product_index = self.product_to_index[product_id]
+                similar_indices = np.argsort(self.product_similarity_matrix[product_index])[::-1][1:6]
+                similar_products.extend([self.index_to_product[idx] for idx in similar_indices])
+        
+        # Combine and remove duplicates
+        recommendations = list(set(similar_products + category_products['id'].tolist()))
+        
+        # Remove products already in wishlist
+        recommendations = [p for p in recommendations if p not in user_wishlist]
+        
+        return recommendations[:n]
 
-        recommendation_scores = {}
+    def get_price_based_recommendations(self, user_id, n=10):
+        user = self.users_df[self.users_df['id'] == user_id].iloc[0]
+        source_country_id = user['source_country_id']
+        dest_country_id = user['destination_country_id']
+        
+        # Get products with significant price differences
+        price_recommendations = []
+        for product_id, price_diffs in self.price_differences.items():
+            if dest_country_id in price_diffs:
+                price_diff = price_diffs[dest_country_id]
+                if abs(price_diff) > 20:  # Only consider significant price differences
+                    price_recommendations.append((product_id, abs(price_diff)))
+        
+        return sorted(price_recommendations, key=lambda x: x[1], reverse=True)[:n]
 
-        for i, product_id in enumerate(collaborative_recommendations):
-            score = collaborative_weight * (1.0 - i / len(collaborative_recommendations))
-            recommendation_scores[product_id] = recommendation_scores.get(product_id, 0) + score
-
-        for i, product_id in enumerate(category_recommendations):
-            score = category_weight * (1.0 - i / len(category_recommendations))
-            recommendation_scores[product_id] = recommendation_scores.get(product_id, 0) + score
-
-        sorted_recommendation = sorted(recommendation_scores.items(), key=lambda x: x[1], reverse=True)[:n]
-
-        return [product_id for product_id, _ in sorted_recommendation]
+    def build_hybrid_recommendations(self, user_id, n=20):
+        # Get recommendations from different sources
+        collaborative_recs = self.get_collaborative_recommendations(user_id, n)
+        content_recs = self.get_content_based_recommendations(user_id, n)
+        price_recs = self.get_price_based_recommendations(user_id, n)
+        
+        # Combine and score recommendations
+        recommendation_scores = defaultdict(float)
+        
+        # Weight for different recommendation sources
+        weights = {
+            'collaborative': 0.4,
+            'content': 0.3,
+            'price': 0.3
+        }
+        
+        # Add collaborative recommendations
+        for product_id, similarity in collaborative_recs:
+            recommendation_scores[product_id] += weights['collaborative'] * similarity
+        
+        # Add content-based recommendations
+        for product_id in content_recs:
+            recommendation_scores[product_id] += weights['content']
+        
+        # Add price-based recommendations
+        for product_id, price_diff in price_recs:
+            recommendation_scores[product_id] += weights['price'] * (price_diff / 100)
+        
+        # Sort and return top recommendations
+        sorted_recommendations = sorted(
+            recommendation_scores.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:n]
+        
+        return [product_id for product_id, _ in sorted_recommendations]
 
     def get_category_details(self, category_ids):
         category_info = [
@@ -206,10 +322,17 @@ class RecommendationEngine:
         return suggested_categories
 
     def train(self):
+        print("Loading data...")
         self.loadData()
+        print("Building user-item matrix...")
         self.build_user_item_matrix()
-        self.build_category_based_recommendation()
-        self.build_collaborative_filter()
+        print("Building product similarity matrix...")
+        self.build_product_similarity_matrix()
+        print("Calculating price differences...")
+        self.calculate_price_differences()
+        print("Building user similarity matrix...")
+        self.similarity_matrix = cosine_similarity(self.user_item_matrix)
+        print("Training completed!")
 
     def get_product_details(self, product_ids):
         products = [
@@ -228,17 +351,16 @@ class RecommendationEngine:
             "wishlist_df": self.wishlist_df,
             "user_item_matrix": self.user_item_matrix,
             "similarity_matrix": self.similarity_matrix,
+            "product_similarity_matrix": self.product_similarity_matrix,
+            "price_differences": dict(self.price_differences),
             "user_to_index": self.user_to_index,
             "index_to_user": self.index_to_user,
             "product_to_index": self.product_to_index,
-            "index_to_product": self.index_to_product,
-            "category_recommendations": self.category_recommendations
+            "index_to_product": self.index_to_product
         }
 
         with open(file, 'wb') as f:
             pickle.dump(model_data, f)
-
-        #print(f"Model saved to {file}")
 
     def load_model(self, file):
         try:
@@ -252,60 +374,41 @@ class RecommendationEngine:
             self.wishlist_df = model_data["wishlist_df"]
             self.user_item_matrix = model_data["user_item_matrix"]
             self.similarity_matrix = model_data["similarity_matrix"]
+            self.product_similarity_matrix = model_data["product_similarity_matrix"]
+            self.price_differences = defaultdict(dict, model_data["price_differences"])
             self.user_to_index = model_data["user_to_index"]
             self.index_to_user = model_data["index_to_user"]
             self.product_to_index = model_data["product_to_index"]
             self.index_to_product = model_data["index_to_product"]
-            self.category_recommendations = defaultdict(list, model_data['category_recommendations'])
 
-            #print(f"Model loaded from {file}")
             return True
         except Exception as e:
-            #print(f"Error loading model: {e}")
+            print(f"Error loading model: {e}")
             return False
 
     def recommend(self, user_id, n=20):
-        recommended_product_ids = self.build_hybrid_recommendations(user_id, n=n)
-        #products = self.get_product_details(recommended_product_ids)
-
-        return recommended_product_ids
-
+        try:
+            recommended_product_ids = self.build_hybrid_recommendations(user_id, n)
+            return recommended_product_ids
+        except Exception as e:
+            print(f"Error in recommendation: {e}")
+            return []
 
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python model.py <user_id> [num_recommendations]")
+        sys.exit(1)
+
     user_id = int(sys.argv[1])
-    num_recommendations = int(sys.argv[2]) if len(sys.argv) > 2 else None
-    model = RecommendationEngine()
-    '''
-    model.train()
-    print(model.recommend(38))
-    #print(model.get_suggested_categories(38))
-    '''
+    n = int(sys.argv[2]) if len(sys.argv) > 2 else 20
 
-    model_file = "model.pkl"
-
-    # if os.path.exists(model_file):
-    #     #print("Loading existing model...")
-    #     model.load_model(model_file)
-    # else:
-    #     #print("Training new model...")
-    #     model.train()
-    #     model.save_model(model_file)
-        
-    # if num_recommendations:
-    #     result_ids = model.recommend(user_id, num_recommendations)
-    # else:
-    #     result_ids = model.recommend(user_id)
-#    print(json.dumps({"productIds": result_ids}))
+    engine = RecommendationEngine()
     
-    print(model.sampleData())
+    # Try to load existing model
+    if not engine.load_model("model.pkl"):
+        print("Training new model...")
+        engine.train()
+        engine.save_model("model.pkl")
     
-    # print(result_ids)
-    '''
-    def custom_serializer(obj):
-        if isinstance(obj, (datetime.datetime, datetime.date)):
-            return obj.isoformat()
-        if isinstance(obj, np.generic):
-            return obj.item()  # Convert numpy types to Python scalars
-        raise TypeError(f"Type {type(obj)} not serializable")
-    print(json.dumps(results, default=str, indent=2))
-    '''
+    recommendations = engine.recommend(user_id, n)
+    print(json.dumps(recommendations))
