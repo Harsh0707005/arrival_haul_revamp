@@ -215,10 +215,6 @@ class RecommendationEngine:
         collaborative_recs = self.get_collaborative_recommendations(user_id, n)
         content_recs = self.get_content_based_recommendations(user_id, n)
         
-        # Get user's source country
-        user = self.users_df[self.users_df['id'] == user_id].iloc[0]
-        source_country_id = user['source_country_id']
-        
         # Combine and score recommendations
         recommendation_scores = defaultdict(float)
         
@@ -236,44 +232,14 @@ class RecommendationEngine:
         for product_id in content_recs:
             recommendation_scores[product_id] += weights['content']
         
-        # Sort all recommendations by score
-        all_recommendations = sorted(
+        # Sort and return top recommendations
+        sorted_recommendations = sorted(
             recommendation_scores.items(),
             key=lambda x: x[1],
             reverse=True
-        )
+        )[:n]
         
-        # Separate recommendations by country
-        source_country_recs = []
-        other_country_recs = []
-        
-        for product_id, score in all_recommendations:
-            product = self.products_df[self.products_df['id'] == product_id].iloc[0]
-            if product['country_id'] == source_country_id:
-                source_country_recs.append((product_id, score))
-            else:
-                other_country_recs.append((product_id, score))
-        
-        # Calculate number of recommendations from each source
-        n_source = int(n * 0.6)  # 60% from source country
-        n_other = n - n_source   # Remaining from other countries
-        
-        # Get final recommendations
-        final_recommendations = []
-        
-        # Add source country recommendations
-        final_recommendations.extend([p[0] for p in source_country_recs[:n_source]])
-        
-        # Add other country recommendations
-        final_recommendations.extend([p[0] for p in other_country_recs[:n_other]])
-        
-        # If we don't have enough recommendations from source country, fill with other countries
-        if len(final_recommendations) < n:
-            remaining = n - len(final_recommendations)
-            additional_recs = [p[0] for p in other_country_recs[len(final_recommendations):len(final_recommendations) + remaining]]
-            final_recommendations.extend(additional_recs)
-        
-        return final_recommendations
+        return [product_id for product_id, _ in sorted_recommendations]
 
     def get_category_details(self, category_ids):
         category_info = [
