@@ -335,7 +335,8 @@ class RecommendationEngine:
     def recommend(self, user_id, n=20):
         try:
             recommended_product_ids = self.build_hybrid_recommendations(user_id, n)
-            return recommended_product_ids
+            # Convert numpy integers to plain Python integers
+            return [int(x) for x in recommended_product_ids]
         except Exception as e:
             print(f"Error in recommendation: {e}")
             return []
@@ -357,4 +358,4 @@ if __name__ == "__main__":
         engine.save_model("model.pkl")
     
     recommendations = engine.recommend(user_id, n)
-    print(json.dumps(recommendations))
+    print(recommendations)
