@@ -73,6 +73,8 @@ exports.getBrandCommonProducts = async (req, res) => {
                 sourceProduct.price
             );
 
+            if (diff.percentageDifference < -35 || diff.percentageDifference > 35) continue;
+
             const brand = await prisma.brand.findUnique({
                 where: { id: sourceProduct.brand_id }
             });
