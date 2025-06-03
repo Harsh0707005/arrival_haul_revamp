@@ -88,6 +88,14 @@ exports.getCategoryCommonProducts = async (req, res) => {
                 where: { id: sourceProduct.brand_id }
             });
 
+            // Check if the product is in user's wishlist
+            const isFavorite = await prisma.wishlist.findFirst({
+                where: {
+                    userId: req.user.id,
+                    productId: sourceProduct.id
+                }
+            });
+
             results.push({
                 product_id: sourceProduct.id,
                 sku_id: sourceProduct.sku_id,
@@ -95,7 +103,7 @@ exports.getCategoryCommonProducts = async (req, res) => {
                 price: sourceProduct.price,
                 images: sourceProduct.images,
                 currency: sourceProduct.currency,
-                is_favourite: wishlistedProductIds.has(sourceProduct.id),
+                is_favourite: !!isFavorite,
                 brand_name: brand ? brand.name : "Unknown",
                 source_country_details: {
                     product_url: sourceProduct.url || "",

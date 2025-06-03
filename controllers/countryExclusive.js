@@ -48,17 +48,6 @@ exports.getCountryExclusiveProducts = async (req, res) => {
             OFFSET ${(page - 1) * pageSize}
         `;
 
-        const wishlistEntries = await prisma.wishlist.findMany({
-            where: {
-                userId: req.user.id,
-                productId: {
-                    in: exclusiveProducts.map(p => p.id)
-                }
-            }
-        });
-
-        const wishlistedProductIds = new Set(wishlistEntries.map(entry => entry.productId));
-
         const formattedProducts = await Promise.all(exclusiveProducts.map(async (product) => {
             const diff = await calculatePriceDifference(
                 source_country_id,
@@ -66,6 +55,14 @@ exports.getCountryExclusiveProducts = async (req, res) => {
                 product.price,
                 0
             );
+
+            // Check if the product is in user's wishlist
+            const isFavorite = await prisma.wishlist.findFirst({
+                where: {
+                    userId: req.user.id,
+                    productId: product.id
+                }
+            });
 
             return {
                 product_id: product.id,
@@ -81,7 +78,7 @@ exports.getCountryExclusiveProducts = async (req, res) => {
                     category_name: product.category_name || null
                 },
                 images: product.images?.length ? [product.images[0]] : [],
-                is_favourite: wishlistedProductIds.has(product.id),
+                is_favourite: !!isFavorite,
                 source_country_details: {
                     original: diff.sourcePriceOriginal,
                     converted: diff.destinationPriceConverted,

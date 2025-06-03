@@ -93,6 +93,14 @@ exports.searchProducts = async (req, res) => {
                 product.price
             );
 
+            // Check if the product is in user's wishlist
+            const isFavorite = await prisma.wishlist.findFirst({
+                where: {
+                    userId: req.user.id,
+                    productId: product.id
+                }
+            });
+
             return {
                 product_id: product.id,
                 sku_id: product.sku_id,
@@ -101,6 +109,7 @@ exports.searchProducts = async (req, res) => {
                 brand: product.brand ? product.brand.name : "Unknown",
                 country_name: product.country ? product.country.name : "Unknown",
                 images: product.images?.length ? [product.images[0]] : [],
+                is_favourite: !!isFavorite,
                 source_country_details: {
                     original: diff.sourcePriceOriginal,
                     converted: diff.destinationPriceConverted,

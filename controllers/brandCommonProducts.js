@@ -79,12 +79,21 @@ exports.getBrandCommonProducts = async (req, res) => {
                 where: { id: sourceProduct.brand_id }
             });
 
+            // Check if the product is in user's wishlist
+            const isFavorite = await prisma.wishlist.findFirst({
+                where: {
+                    userId: req.user.id,
+                    productId: sourceProduct.id
+                }
+            });
+
             results.push({
                 product_id: sourceProduct.id,
                 sku_id: sourceProduct.sku_id,
                 product_name: sourceProduct.name,
                 images: [sourceProduct.images[0]],
                 brand_name: brand ? brand.name : "Unknown",
+                is_favorite: !!isFavorite,
                 source_country_details: {
                     product_url: sourceProduct.url || "",
                     original: diff.sourcePriceOriginal,

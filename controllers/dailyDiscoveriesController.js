@@ -62,6 +62,14 @@ exports.getDailyDiscoveries = async (req, res) => {
                 const brand = await prisma.brand.findUnique({ where: { id: product.brand_id } });
                 const country = await prisma.country.findUnique({ where: { id: product.country_id } });
 
+                // Check if the product is in user's wishlist
+                const isFavorite = await prisma.wishlist.findFirst({
+                    where: {
+                        userId: req.user.id,
+                        productId: product.id
+                    }
+                });
+
                 return {
                     product_id: product.id,
                     sku_id: product.sku_id,
@@ -70,6 +78,7 @@ exports.getDailyDiscoveries = async (req, res) => {
                     brand: brand ? brand.name : "Unknown",
                     country_name: country ? country.name : "Unknown",
                     images: [product.images[0]],
+                    is_favourite: !!isFavorite,
                     source_country_details: {
                         original: diff.sourcePriceOriginal,
                         converted: diff.destinationPriceConverted,
