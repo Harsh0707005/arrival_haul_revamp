@@ -4,3 +4,4 @@ node_modules
 !utils/product_identifiers.json
 *.zip
 venv/
+migrations/
