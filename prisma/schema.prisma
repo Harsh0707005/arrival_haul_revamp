@@ -24,6 +24,7 @@ model User {
     updatedAt              DateTime   @updatedAt
     interestedCategories   Category[] @relation("UserInterestedCategories")
     wishlists              Wishlist[]
+    productFeedbacks       ProductFeedback[]
 }
 
 model Otp {
@@ -51,6 +52,7 @@ model Product {
     createdAt   DateTime   @default(now())
     updatedAt   DateTime   @updatedAt
     wishlists   Wishlist[]
+    feedbacks   ProductFeedback[]
 }
 
 model Brand {
@@ -107,6 +109,19 @@ model Wishlist {
     product   Product  @relation(fields: [productId], references: [id])
     productId Int
     createdAt DateTime @default(now())
+
+    @@unique([userId, productId])
+}
+
+model ProductFeedback {
+    id              Int      @id @default(autoincrement())
+    user            User     @relation(fields: [userId], references: [id])
+    userId          Int
+    product         Product  @relation(fields: [productId], references: [id])
+    productId       Int
+    isPriceAccurate Boolean
+    createdAt       DateTime @default(now())
+    updatedAt       DateTime @updatedAt
 
     @@unique([userId, productId])
 }

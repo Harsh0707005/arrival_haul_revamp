@@ -56,7 +56,6 @@ exports.getCountryExclusiveProducts = async (req, res) => {
                 0
             );
 
-            // Check if the product is in user's wishlist
             const isFavorite = await prisma.wishlist.findFirst({
                 where: {
                     userId: req.user.id,

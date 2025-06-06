@@ -24,6 +24,7 @@ const { getWishlistProducts } = require('../controllers/fetchWishlistController'
 const { resetPassword } = require('../controllers/resetPasswordController');
 const { searchProducts } = require('../controllers/searchProductsController');
 const { getDailyDiscoveries } = require("../controllers/dailyDiscoveriesController");
+const { submitProductFeedback } = require("../controllers/productFeedbackController");
 
 // router.post('/signup', signup);
 router.post('/login', login);
@@ -55,5 +56,7 @@ router.get('/product-details', authMiddleware, getProductDetails);
 router.get('/brands/list', authMiddleware, getCommonBrands);
 router.get('/categories/list', authMiddleware, getCommonCategories);
 router.get("/daily-discoveries", authMiddleware, getDailyDiscoveries);
+
+router.post("/product-feedback", authMiddleware, submitProductFeedback);
 
 module.exports = router;
